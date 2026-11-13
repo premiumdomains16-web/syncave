@@ -124,6 +124,30 @@ check("simulator refuses internal address", r.status === 400, String(r.status));
 r = await call("POST", "/api/simulate", { json: { url: "http://localhost" } });
 check("simulator refuses localhost", r.status === 400, String(r.status));
 
+// --- verification helpers (no network) ---
+{
+  const { parseSiteSignals, siteFetchError, dnsHostsFor, dnsRecordValue } = await import("../server/verify.js");
+  const { BlockedAddress } = await import("../server/safeFetch.js");
+  const html = `<!doctype html><html><head><title>x</title>
+    <meta content=" tok123 " NAME="Syncave-Verification">
+  </head><body>
+    <meta name="sitebot-verification" content="legacy9">
+    <script src="https://syncave.web.app/widget.js?id=bot111" async></script>
+    <script src="/widget.js?id=bot222"></script>
+    <script src="https://cdn.example.com/other.js?id=zzz"></script>
+    <script src="https://x.example/widget.js"></script>
+  </body></html>`;
+  const s = parseSiteSignals(html, "https://shop.example.com/home");
+  check("meta tag found anywhere, any case/order, trimmed", s.metaTokens.includes("tok123") && s.metaTokens.includes("legacy9"), JSON.stringify(s.metaTokens));
+  check("widget scripts found with bot ids", s.widgetScripts.map((w) => w.botId).join(",") === "bot111,bot222", JSON.stringify(s.widgetScripts));
+  check("relative widget src resolved to the site's host", s.widgetScripts[1].host === "shop.example.com");
+  check("blocked → actionable message", /bot protection/.test(siteFetchError(new Error("HTTP 403"), "https://a.example").message));
+  check("timeout → actionable message", /too long/.test(siteFetchError(Object.assign(new Error("x"), { name: "TimeoutError" }), "https://a.example").message));
+  check("private address → 400", siteFetchError(new BlockedAddress("x"), "https://a.example").status === 400);
+  check("dns hosts include parent for www", dnsHostsFor("https://www.shop.com/").join(",") === "www.shop.com,shop.com");
+  check("dns record value", dnsRecordValue("sb_abc") === "syncave-verification=sb_abc");
+}
+
 // --- delete ---
 r = await call("DELETE", `/api/bots/${bot.id}`, { token: alice });
 check("delete bot", r.status === 200);

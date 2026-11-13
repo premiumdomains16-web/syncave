@@ -9043,10 +9043,6 @@ async function fetchSiteTitle(url2) {
     return fallback;
   }
 }
-async function fetchVerificationToken(url2) {
-  const $ = load((await fetchPage(url2, { userAgent: "Syncave-Verifier/1.0" })).html);
-  return $('meta[name="syncave-verification"]').attr("content") ?? $('meta[name="sitebot-verification"]').attr("content");
-}
 var SANDBOX_STORAGE_SHIM = `<script>(function(){
 function mem(){var s={};return{getItem:function(k){return Object.prototype.hasOwnProperty.call(s,k)?s[k]:null},setItem:function(k,v){s[k]=String(v)},removeItem:function(k){delete s[k]},clear:function(){s={}},key:function(i){return Object.keys(s)[i]||null},get length(){return Object.keys(s).length}}}
 ["localStorage","sessionStorage"].forEach(function(n){try{window[n].length}catch(e){try{Object.defineProperty(window,n,{value:mem(),configurable:true})}catch(_){}}});
@@ -9082,6 +9078,104 @@ var HttpError = class extends Error {
     this.status = status;
   }
 };
+
+// server/verify.ts
+var META_NAMES = /* @__PURE__ */ new Set(["syncave-verification", "sitebot-verification"]);
+function parseSiteSignals(html3, pageUrl) {
+  const $ = load(html3);
+  const metaTokens = $("meta").toArray().filter((el) => META_NAMES.has(String($(el).attr("name") ?? "").trim().toLowerCase())).map((el) => String($(el).attr("content") ?? "").trim()).filter(Boolean);
+  const widgetScripts = [];
+  $("script[src]").each((_, el) => {
+    const raw2 = String($(el).attr("src") ?? "").trim();
+    let u;
+    try {
+      u = new URL(raw2, pageUrl);
+    } catch {
+      return;
+    }
+    if (!/\/widget\.js$/i.test(u.pathname)) return;
+    const botId = u.searchParams.get("id");
+    if (!botId) return;
+    widgetScripts.push({ src: u.toString(), host: u.host, botId });
+  });
+  return { metaTokens, widgetScripts };
+}
+function siteFetchError(err, url2) {
+  const host = (() => {
+    try {
+      return new URL(url2).host;
+    } catch {
+      return url2;
+    }
+  })();
+  const msg = err instanceof Error ? err.message : String(err);
+  const name = err?.name ?? "";
+  if (err instanceof BlockedAddress) return new HttpError(400, `${host} points to a private or internal address, so it can't be checked.`);
+  if (name === "TimeoutError" || name === "AbortError" || /timed? ?out/i.test(msg)) return new HttpError(504, `${host} took too long to respond. Make sure the site is online, then try again.`);
+  if (/resolve|ENOTFOUND|EAI_AGAIN|dns/i.test(msg)) return new HttpError(502, `We couldn't find ${host}. Check that the domain is correct and already pointing to your website.`);
+  const status = Number(msg.match(/^HTTP (\d{3})/)?.[1]);
+  if (status === 401 || status === 403 || status === 429 || status === 503) {
+    return new HttpError(502, `${host} blocked our check (HTTP ${status}). This often happens with Cloudflare or other bot protection, a login, or a maintenance page. Use the DNS method instead, or allow our check temporarily.`);
+  }
+  if (status === 404) return new HttpError(502, `${host} answered "page not found" (404). Make sure your homepage is published at this address.`);
+  if (status) return new HttpError(502, `${host} returned an error (HTTP ${status}). Make sure the site is online, then try again.`);
+  if (/Not an HTML page/i.test(msg)) return new HttpError(502, `${host} didn't return a web page. Check that the site address is your homepage.`);
+  if (/too large/i.test(msg)) return new HttpError(502, `${host}'s homepage is too large to check (over 2 MB). Use the DNS method instead.`);
+  if (/redirect/i.test(msg)) return new HttpError(502, `${host} redirects too many times. Check your site's redirect settings.`);
+  return new HttpError(502, `We couldn't reach ${host}. Make sure the site is public, then try again.`);
+}
+async function txtRecords(host) {
+  try {
+    const Deno2 = globalThis.Deno;
+    if (Deno2?.resolveDns) return (await Deno2.resolveDns(host, "TXT")).map((r) => r.join(""));
+    const dns = await import("node:dns/promises");
+    return (await dns.resolveTxt(host)).map((r) => r.join(""));
+  } catch {
+    return [];
+  }
+}
+function dnsHostsFor(url2) {
+  const host = new URL(url2).hostname.toLowerCase();
+  return host.startsWith("www.") ? [host, host.slice(4)] : [host];
+}
+var dnsRecordValue = (token) => `syncave-verification=${token}`;
+async function verifyOwnership(bot) {
+  let pageError = null;
+  let signals = null;
+  try {
+    const page = await fetchPage(bot.url, { timeout: 1e4 });
+    signals = parseSiteSignals(page.html, page.finalUrl);
+  } catch (e) {
+    pageError = siteFetchError(e, bot.url);
+  }
+  if (signals) {
+    if (signals.metaTokens.includes(bot.verificationToken)) return "meta";
+    if (signals.widgetScripts.some((s) => s.botId === bot.id)) return "snippet";
+  }
+  const records = (await Promise.all(dnsHostsFor(bot.url).map(txtRecords))).flat();
+  if (records.some((r) => r.trim() === dnsRecordValue(bot.verificationToken))) return "dns";
+  if (pageError) throw pageError;
+  if (records.some((r) => r.trim().startsWith("syncave-verification="))) {
+    throw new HttpError(400, "Found a Syncave DNS record, but its value doesn't match this site's token. Copy the record value again.");
+  }
+  if (signals.metaTokens.length) {
+    throw new HttpError(400, "Found a verification tag, but its token doesn't match. Make sure you copied this site's latest tag.");
+  }
+  if (signals.widgetScripts.length) {
+    throw new HttpError(400, "Found a Syncave chat script, but it belongs to a different site in your account. Copy the snippet from this site's Install tab.");
+  }
+  throw new HttpError(400, "We couldn't find the verification tag or this site's chat script on your homepage. If your site builder adds code with JavaScript, use the DNS method instead.");
+}
+async function installStatus(bot) {
+  let page;
+  try {
+    page = await fetchPage(bot.url, { timeout: 1e4 });
+  } catch (e) {
+    throw siteFetchError(e, bot.url);
+  }
+  const { widgetScripts } = parseSiteSignals(page.html, page.finalUrl);
+  return { installed: widgetScripts.some((s) => s.botId === bot.id), scripts: widgetScripts, checkedUrl: page.finalUrl };
+}
 
 // server/security.ts
 var ascii = (b, start, end2) => String.fromCharCode(...b.subarray(start, end2));
@@ -29569,20 +29663,17 @@ function createApp({ verifyToken }) {
   app2.post("/api/bots/:id/verify", dashLimit, siteFetchLimit, signedIn, async (c) => {
     const ownerId = me(c).id;
     const bot = await findOwnedBot(ownerId, c.req.param("id"));
-    let token;
-    try {
-      token = await fetchVerificationToken(bot.url);
-    } catch {
-      throw new HttpError(502, "Could not reach your website. Make sure the URL is public.");
-    }
-    if (token !== bot.verificationToken) {
-      throw new HttpError(400, token ? "Found a verification tag but the token doesn't match. Make sure you copied the latest one." : "We couldn't find the verification meta tag in your site's <head>. Add it and try again.");
-    }
+    const method = await verifyOwnership(bot);
     const updated = await mutateOwnedBot(ownerId, bot.id, (b) => {
       b.verified = true;
       return b;
     });
-    return c.json({ success: true, bot: updated });
+    return c.json({ success: true, method, bot: updated });
+  });
+  app2.get("/api/bots/:id/install-status", dashLimit, siteFetchLimit, signedIn, async (c) => {
+    const bot = await findOwnedBot(me(c).id, c.req.param("id"));
+    c.header("Cache-Control", "no-store");
+    return c.json(await installStatus(bot));
   });
   app2.post("/api/bots/:id/publish", dashLimit, signedIn, async (c) => {
     const user = me(c);

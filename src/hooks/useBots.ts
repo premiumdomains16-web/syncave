@@ -96,9 +96,10 @@ export function useBots() {
   }, []);
 
   const verify = useCallback(async (id: string) => {
-    const { bot } = await api.verify(id);
+    const { bot, method } = await api.verify(id);
     // Keep local draft edits; only take the verified flag from the server.
     setBots((prev) => prev.map((b) => (b.id === id ? { ...b, verified: bot.verified } : b)));
+    return method;
   }, []);
 
   const publish = useCallback(async (id: string) => {

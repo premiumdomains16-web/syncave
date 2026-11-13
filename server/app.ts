@@ -18,7 +18,8 @@ import { formatLimit, limitsFor, nextPlanWhere, PLAN_NAMES, publishBlockers, typ
 import { questionKey, scriptOf } from "../shared/normalize.js";
 import { db } from "./db/index.js";
 import { deleteOwnedBot, findBot, findOwnedBot, insertBot, listOwnedBots, mutateOwnedBot, NotFound } from "./store.js";
-import { buildSitePreview, fetchSiteTitle, fetchVerificationToken, normalizeUrl } from "./site.js";
+import { buildSitePreview, fetchSiteTitle, normalizeUrl } from "./site.js";
+import { installStatus, verifyOwnership } from "./verify.js";
 import { BlockedAddress } from "./safeFetch.js";
 import { HttpError } from "./errors.js";
 import { checkImage } from "./security.js";
@@ -401,19 +402,17 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
   app.post("/api/bots/:id/verify", dashLimit, siteFetchLimit, signedIn, async (c) => {
     const ownerId = me(c).id;
     const bot = await findOwnedBot(ownerId, c.req.param("id"));
-    let token: string | undefined;
-    try {
-      token = await fetchVerificationToken(bot.url);
-    } catch {
-      throw new HttpError(502, "Could not reach your website. Make sure the URL is public.");
-    }
-    if (token !== bot.verificationToken) {
-      throw new HttpError(400, token
-        ? "Found a verification tag but the token doesn't match. Make sure you copied the latest one."
-        : "We couldn't find the verification meta tag in your site's <head>. Add it and try again.");
-    }
+    // Meta tag, this bot's chat script, or a DNS TXT record: any one proves ownership.
+    const method = await verifyOwnership(bot);
     const updated = await mutateOwnedBot(ownerId, bot.id, (b) => { b.verified = true; return b; });
-    return c.json({ success: true, bot: updated });
+    return c.json({ success: true, method, bot: updated });
+  });
+
+  // Is the chat snippet on the site's homepage, and does it point at the right address?
+  app.get("/api/bots/:id/install-status", dashLimit, siteFetchLimit, signedIn, async (c) => {
+    const bot = await findOwnedBot(me(c).id, c.req.param("id"));
+    c.header("Cache-Control", "no-store");
+    return c.json(await installStatus(bot));
   });
 
   app.post("/api/bots/:id/publish", dashLimit, signedIn, async (c) => {

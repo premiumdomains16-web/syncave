@@ -34,7 +34,7 @@ export function DocsPage({ onContact }: { onContact: () => void }) {
             <ol className="space-y-2 list-decimal list-inside marker:text-slate-400">
               <li><strong className="text-slate-900">Add a site.</strong> Click <em>Add site</em>, enter your homepage URL and pick a template. We create a draft chatbot for you.</li>
               <li><strong className="text-slate-900">Write Q&A pairs.</strong> Add the questions visitors typically ask and the answers the bot should give. Test them in the preview panel.</li>
-              <li><strong className="text-slate-900">Verify your domain.</strong> Add a small meta tag to your site's <InlineCode>&lt;head&gt;</InlineCode> so we know you own it.</li>
+              <li><strong className="text-slate-900">Verify your domain.</strong> Prove the site is yours in any one way: a small meta tag, the chat script itself (one paste does both), or a DNS TXT record.</li>
               <li><strong className="text-slate-900">Publish.</strong> Click <em>Publish</em> in the site header (or press <InlineCode>Ctrl</InlineCode>+<InlineCode>S</InlineCode>).</li>
               <li><strong className="text-slate-900">Embed.</strong> Paste the snippet from the <em>Embed</em> tab into your site, just before <InlineCode>&lt;/body&gt;</InlineCode>.</li>
             </ol>
@@ -88,7 +88,7 @@ export function DocsPage({ onContact }: { onContact: () => void }) {
                 Make sure you've published at least once and that the snippet is on the page. Open your browser console and look for <InlineCode>[Syncave]</InlineCode> warnings.
               </Trouble>
               <Trouble q="Verification fails">
-                Confirm the meta tag is inside <InlineCode>&lt;head&gt;</InlineCode> of the exact URL you added, and that the page is publicly reachable. Re-copy the tag from the Verify tab.
+                The Verify tab tells you what went wrong. Most often the homepage isn't public, or your host's bot protection (e.g. Cloudflare) blocks our check, or your site builder adds code with JavaScript so it isn't in the page source. In those cases use the <strong className="text-slate-900">DNS record</strong> method, which doesn't need your page at all.
               </Trouble>
               <Trouble q="My edits aren't showing on my site">
                 The live widget only serves the <strong>published</strong> version. Publish your draft from the site header.

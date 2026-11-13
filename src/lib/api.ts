@@ -39,7 +39,8 @@ export const api = {
   createBot: (url: string, templateId: string) => request<Bot>('/api/bots', json('POST', { url, templateId })),
   patchBot: (id: string, patch: BotPatch) => request<Bot>(`/api/bots/${id}`, json('PATCH', patch)),
   deleteBot: (id: string) => request<{ success: true }>(`/api/bots/${id}`, { method: 'DELETE' }),
-  verify: (id: string) => request<{ success: true; bot: Bot }>(`/api/bots/${id}/verify`, { method: 'POST' }),
+  verify: (id: string) => request<{ success: true; method: VerifyMethod; bot: Bot }>(`/api/bots/${id}/verify`, { method: 'POST' }),
+  installStatus: (id: string) => request<InstallStatus>(`/api/bots/${id}/install-status`),
   publish: (id: string) => request<Bot>(`/api/bots/${id}/publish`, { method: 'POST' }),
   discard: (id: string) => request<Bot>(`/api/bots/${id}/discard`, { method: 'POST' }),
   orders: (id: string, { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {}) =>
@@ -75,8 +76,30 @@ export const api = {
   },
 };
 
+export type VerifyMethod = 'meta' | 'snippet' | 'dns';
+export interface InstallStatus { installed: boolean; scripts: { src: string; host: string; botId: string | null }[]; checkedUrl: string }
+
+/**
+ * Public address of this website, where customers load widget.js from. Set VITE_SITE_URL
+ * (e.g. your custom domain) to pin it; otherwise the address the dashboard is open on,
+ * except locally, where it falls back to the live Firebase address.
+ */
+export const SITE_URL = (() => {
+  const fixed = (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(/\/+$/, '');
+  if (fixed) return fixed;
+  const local = /^(localhost$|127\.|10\.|192\.168\.)/.test(window.location.hostname);
+  return local ? 'https://easybot-7be3f.web.app' : window.location.origin;
+})();
+
+export const SITE_HOST = new URL(SITE_URL).host;
+
 export function embedSnippet(botId: string) {
-  return `<script src="${window.location.origin}/widget.js?id=${botId}"></script>`;
+  return `<script src="${SITE_URL}/widget.js?id=${botId}" async></script>`;
+}
+
+/** DNS TXT record that verifies ownership (alternative to the meta tag). */
+export function verificationDnsRecord(token: string) {
+  return `syncave-verification=${token}`;
 }
 
 export function verificationMetaTag(token: string) {

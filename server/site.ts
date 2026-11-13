@@ -28,15 +28,6 @@ export async function fetchSiteTitle(url: string): Promise<string> {
   }
 }
 
-/** Reads the syncave-verification meta tag (or the legacy sitebot-verification one) from the homepage. Throws if the site is unreachable. */
-export async function fetchVerificationToken(url: string): Promise<string | undefined> {
-  const $ = cheerio.load((await fetchPage(url, { userAgent: "Syncave-Verifier/1.0" })).html);
-  return (
-    $('meta[name="syncave-verification"]').attr("content") ??
-    $('meta[name="sitebot-verification"]').attr("content")
-  );
-}
-
 // In the sandboxed (opaque-origin) preview frame, touching localStorage,
 // sessionStorage or document.cookie throws — and many JavaScript-built sites
 // crash on that and render a blank page. Swap in throwaway in-memory versions.
