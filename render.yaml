@@ -1,0 +1,32 @@
+# Render Blueprint: deploys Syncave as one free web service (site + API + widget).
+# Render dashboard → New → Blueprint → pick this repository. Render reads this file.
+#
+# Free-plan notes:
+# - The service sleeps after ~15 min without traffic; the next visit takes ~30–60 s to wake it.
+#   A free uptime monitor (e.g. UptimeRobot) pinging /api/health every 5 min keeps it awake;
+#   the free plan's 750 hours/month cover one service running all month.
+# - There is no persistent disk, so data must live in Supabase (SUPABASE_URL + key below).
+services:
+  - type: web
+    name: syncave
+    runtime: node
+    plan: free
+    region: frankfurt
+    # Dev dependencies (vite, tsx) are needed to build and run.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Render sits behind a proxy: needed so rate limits see real visitor IPs.
+      - key: TRUST_PROXY
+        value: "1"
+      # Secrets: Render asks for these when you create the Blueprint. Copy them from .env.local.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

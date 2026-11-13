@@ -1,0 +1,228 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Poppins for Latin; IBM Plex Sans Arabic picks up Arabic letters Poppins doesn't have. */
+  --font-sans: "Poppins", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Syncave brand — teal. Change these to re-skin the whole product (website + dashboard). */
+  --color-brand-50: #ecf8f6;
+  --color-brand-100: #d3f0eb;
+  --color-brand-200: #a8e1d7;
+  --color-brand-300: #72cbbd;
+  --color-brand-400: #3fb2a2;
+  --color-brand-500: #1f9787;
+  --color-brand-600: #157a6e;
+  --color-brand-700: #13635a;
+  --color-brand-800: #134f49;
+  --color-brand-900: #12413d;
+  --color-brand-950: #0c2a2a;
+
+  /* Orange accent — the call-to-action color (main buttons, highlights). Named "gold" for history. */
+  --color-gold-50: #fff4ee;
+  --color-gold-100: #ffe6d8;
+  --color-gold-200: #ffc9ad;
+  --color-gold-300: #ffa477;
+  --color-gold-400: #ff7f45;
+  --color-gold-500: #f4621f;
+  --color-gold-600: #d94c12;
+  --color-gold-700: #b33b12;
+  --color-gold-800: #8f3115;
+  --color-gold-900: #742a14;
+  --color-accent: #f4621f;
+
+  /* Neutral "ink" scale, tinted toward the brand teal. Overrides Tailwind's slate so every
+     text-slate-* / border-slate-* / bg-slate-* picks it up. The 400 step is dark enough for
+     small hint text to meet WCAG AA (4.5:1) on white and on the tinted page background. */
+  --color-slate-50: #f5f8f8;
+  --color-slate-100: #edf3f2;
+  --color-slate-200: #dde6e5;
+  --color-slate-300: #c0cdcc;
+  --color-slate-400: #5e6f6f;
+  --color-slate-500: #4e5e5f;
+  --color-slate-600: #3b4a4b;
+  --color-slate-700: #2b3a3b;
+  --color-slate-800: #1c2b2c;
+  --color-slate-900: #112022;
+  --color-slate-950: #091517;
+
+  /* Elevation scale: soft, slightly brand-tinted shadows. */
+  --shadow-card: 0 1px 2px rgba(12, 42, 42, 0.03), 0 6px 20px -8px rgba(12, 42, 42, 0.07);
+  --shadow-card-hover: 0 1px 2px rgba(12, 42, 42, 0.04), 0 14px 32px -12px rgba(12, 42, 42, 0.16);
+  --shadow-pop: 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 32px -8px rgba(15, 23, 42, 0.18);
+  --shadow-brand: 0 8px 22px -8px color-mix(in srgb, var(--color-brand-600) 60%, transparent);
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes slide-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.85); }
+  }
+}
+
+/* Mint page wash used behind the hero and alternating sections. */
+.bg-mint { background-color: #e6f5f2; }
+.shadow-cta { box-shadow: 0 10px 24px -10px rgba(244, 98, 31, 0.6); }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-slate-50);
+  color: var(--color-slate-800);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--color-brand-200); color: var(--color-brand-900); }
+
+@layer base {
+  input::placeholder, textarea::placeholder { color: #8a93ad; opacity: 1; }
+  button, [role="button"] { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  h1, h2, h3 { letter-spacing: -0.015em; }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--color-slate-200); border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--color-slate-300); }
+
+  /* Faint dot grid, used behind hero / CTA sections. */
+  .bg-dots {
+    background-image: radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .bg-dots-light {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .text-gradient {
+    background-image: linear-gradient(90deg, var(--color-brand-800), var(--color-brand-500) 55%, var(--color-brand-400));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* 1px gradient border via a padded wrapper; the child supplies the background. */
+  .gradient-ring {
+    background: linear-gradient(135deg, var(--color-brand-500), var(--color-gold-400));
+    padding: 1.5px;
+  }
+
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-card-hover { box-shadow: var(--shadow-card-hover); }
+  .shadow-pop { box-shadow: var(--shadow-pop); }
+  .shadow-brand { box-shadow: var(--shadow-brand); }
+
+  /* Primary button face: slight top highlight so it reads as a surface, not a flat block. */
+  /* Drawn as an overlay so it layers on top of any background utility (solid or gradient). */
+  .btn-glossy { position: relative; isolation: isolate; }
+  .btn-glossy::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 55%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+}
+
+/* Markdown inside preview chat bubbles — kept compact like the widget. */
+.chat-md > :first-child { margin-top: 0; }
+.chat-md > :last-child { margin-bottom: 0; }
+.chat-md p { margin: 0.35em 0; }
+.chat-md ul, .chat-md ol { margin: 0.35em 0; padding-left: 1.2em; }
+.chat-md ul { list-style: disc; }
+.chat-md ol { list-style: decimal; }
+.chat-md a { text-decoration: underline; font-weight: 500; }
+.chat-md code { font-family: var(--font-mono); font-size: 0.85em; background: #f1f5f9; padding: 0.1em 0.35em; border-radius: 4px; }
+.chat-md strong { font-weight: 600; color: #0f172a; }
+
+/* Simulator: the widget layer sits over the website frame. Let clicks reach the
+   website everywhere except on the widget itself. */
+.sim-widget-layer { pointer-events: none; }
+.sim-widget-layer .sb-root { pointer-events: auto; }
+
+/* ---------- "AI" surface helpers (dashboard) ---------- */
+@layer utilities {
+  /* Royal blue sweep used for icon tiles and the primary button. */
+  .ai-gradient {
+    background-image: linear-gradient(135deg, var(--color-brand-400) 0%, var(--color-brand-600) 100%);
+  }
+  /* Soft glow behind light surfaces: blue top-left, a whisper of gold top-right. */
+  .aurora {
+    background-image:
+      radial-gradient(60% 50% at 10% 0%, color-mix(in srgb, var(--color-brand-500) 12%, transparent), transparent 60%),
+      radial-gradient(50% 40% at 95% 10%, color-mix(in srgb, var(--color-brand-300) 10%, transparent), transparent 60%);
+  }
+  /* Glow on dark surfaces. */
+  .aurora-dark {
+    background-image:
+      radial-gradient(55% 60% at 100% 0%, rgba(255, 255, 255, 0.16), transparent 60%),
+      radial-gradient(45% 50% at 0% 100%, rgba(0, 0, 0, 0.12), transparent 60%);
+  }
+  /* The signature brand surface: a saturated brand gradient with a soft light corner
+     (teal, matching the website). */
+  .surface-royal {
+    background-color: var(--color-brand-600);
+    background-image:
+      radial-gradient(70% 90% at 100% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 60%),
+      linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-brand-600) 50%, var(--color-brand-800) 100%);
+  }
+  /* Near-black card, like an "Upgrade" promo. */
+  .surface-ink {
+    background-color: #14151c;
+    background-image: radial-gradient(80% 80% at 100% 0%, rgba(255, 255, 255, 0.08), transparent 60%);
+  }
+  .glass {
+    background-color: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  /* Slow-moving gradient, for the assistant banner border. */
+  .animate-sheen {
+    background-size: 200% 200%;
+    animation: sheen 8s ease-in-out infinite;
+  }
+  @keyframes sheen {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  /* Glowing status dot. */
+  .dot-glow-green { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18), 0 0 10px rgba(34, 197, 94, 0.55); }
+  .dot-glow-amber { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18), 0 0 10px rgba(245, 158, 11, 0.55); }
+}

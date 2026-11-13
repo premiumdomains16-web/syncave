@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Runtime data: accounts, sessions, customer bots and uploads
+data/
+public/uploads/
+
+# Local backups of DATA_DIR (npm run backup)
+backups/

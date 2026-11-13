@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Shown by the Syncave app (capacitor.config.ts → server.errorPath) when the server can't be reached. Self-contained: no network needed. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Syncave — No connection</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Tahoma, Arial, sans-serif;
+      background: #f8fafc; color: #0f172a;
+      display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; text-align: center;
+    }
+    .card { max-width: 340px; }
+    .logo { width: 64px; height: 64px; margin: 0 auto 20px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { margin: 0 0 4px; color: #64748b; line-height: 1.5; font-size: 15px; }
+    .ar { direction: rtl; margin-top: 18px; }
+    button {
+      margin-top: 28px; width: 100%; border: 0; border-radius: 10px; padding: 14px 16px;
+      background: #6a3aed; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    button:active { background: #5a2bd4; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#6a3aed"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+      <rect width="32" height="32" rx="9" fill="url(#g)"/>
+      <path d="M9.5 23.5V15.5a6.5 6.5 0 0 1 13 0v8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="16" cy="17.5" r="2.4" fill="#fff"/>
+    </svg>
+    <h1>You're offline</h1>
+    <p>Syncave couldn't reach the server. Check your internet connection and try again.</p>
+    <div class="ar">
+      <h1>مفيش اتصال</h1>
+      <p>Syncave مقدرش يوصل للسيرفر. اتأكد من الإنترنت وجرّب تاني.</p>
+    </div>
+    <!-- Going back retries the page that failed to load. -->
+    <button type="button" onclick="history.length > 1 ? history.back() : location.reload()">Try again · جرّب تاني</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check \"e:/new website/sitebots/public/widget.js\")"
+    ]
+  }
+}
