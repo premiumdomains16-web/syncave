@@ -175,8 +175,15 @@
       if (!r.ok) throw new Error("Failed to fetch bot config");
       return r.json();
     })
-    .then((bot) => bot && mount(bot))
+    // The snippet may sit in <head> (site builders' "head code" boxes), so the config can
+    // arrive before <body> exists: wait for it.
+    .then((bot) => bot && whenBodyReady(() => mount(bot)))
     .catch((err) => console.warn("[Syncave] Failed to load:", err));
+
+  function whenBodyReady(fn) {
+    if (document.body) return fn();
+    document.addEventListener("DOMContentLoaded", fn, { once: true });
+  }
 
   function mount(bot) {
     const theme = bot.themeColor || "#4f46e5";
