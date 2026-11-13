@@ -16,3 +16,7 @@ backups/
 
 # Local editor/assistant settings
 .claude/settings.local.json
+
+# Deploy tool caches
+.firebase/
+supabase/.temp/
