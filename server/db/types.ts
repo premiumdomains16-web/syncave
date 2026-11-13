@@ -1,6 +1,5 @@
-// The persistence boundary. Everything the server stores goes through this
-// interface, so the backing store can be the local JSON files (dev/default) or
-// Supabase (production) without touching routes or business logic.
+// The persistence boundary. Everything the API stores goes through this interface:
+// Supabase in production (the Edge Function), local JSON files for automated tests.
 //
 // Design notes for scale:
 // - Orders and unanswered questions live in their own collections and are
@@ -11,21 +10,16 @@
 import type { Bot, ChatMessage, Conversation, Order, Plan, Unanswered, User } from "../../shared/types.js";
 
 export interface UserRecord extends User {
-  passwordHash: string;
+  /** The Supabase Auth user id (auth.users.id) this account signs in with. */
+  authId?: string;
+  /** Only on accounts created before Supabase Auth; no longer used for sign-in. */
+  passwordHash?: string;
   /** Paid plan picked on the pricing page before billing exists — a sales lead to follow up. */
   requestedPlan?: Plan;
 }
 
-export interface SessionRecord {
-  /** sha256 of the cookie token — a leaked table can't be replayed as cookies. */
-  tokenHash: string;
-  userId: string;
-  createdAt: string;
-  expiresAt: string;
-}
-
 export interface UploadInput {
-  buffer: Buffer;
+  buffer: Uint8Array;
   originalName: string;
   mimetype: string;
 }
@@ -47,14 +41,11 @@ export interface Database {
   users: {
     findByEmail(email: string): Promise<UserRecord | undefined>;
     findById(id: string): Promise<UserRecord | undefined>;
+    findByAuthId(authId: string): Promise<UserRecord | undefined>;
     count(): Promise<number>;
     insert(user: UserRecord): Promise<void>;
-  };
-  sessions: {
-    insert(session: SessionRecord): Promise<void>;
-    find(tokenHash: string): Promise<SessionRecord | undefined>;
-    delete(tokenHash: string): Promise<void>;
-    pruneExpired(now: Date): Promise<void>;
+    /** Connects an existing account (e.g. from before Supabase Auth) to a Supabase Auth user. */
+    linkAuth(userId: string, authId: string): Promise<void>;
   };
   bots: {
     listByOwner(ownerId: string): Promise<Bot[]>;

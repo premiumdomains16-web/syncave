@@ -6,7 +6,7 @@
   // instead of us fetching the published one. No history is kept and orders are
   // never submitted. Shape: { bot, container?: Element }.
   const PREVIEW = window.SyncavePreview && typeof window.SyncavePreview === "object" ? window.SyncavePreview : null;
-  // Owner's simulator: save the chat to the Inbox as a test conversation (same-origin, uses the owner's login).
+  // Owner's simulator: save the chat to the Inbox as a test conversation (signed in as the owner via PREVIEW.getToken).
   const TEST = !!(PREVIEW && PREVIEW.testLog);
 
   const script =
@@ -15,7 +15,23 @@
   if (!script && !PREVIEW) return;
 
   const url = new URL(script ? script.src : location.href, location.href);
-  const API = url.origin;
+  // Where the API lives (the Supabase Edge Function). In order of preference: the simulator's
+  // setting, a data-api attribute on the script tag, the address baked in at build time
+  // (scripts/postbuild.mjs replaces the placeholder), or the script's own origin.
+  const BUILT_API = "__SYNCAVE_API_BASE__";
+  const API = String(
+    (PREVIEW && PREVIEW.api) ||
+    (script && script.getAttribute && script.getAttribute("data-api")) ||
+    (BUILT_API.indexOf("__") === 0 ? url.origin : BUILT_API)
+  ).replace(/\/+$/, "");
+  // Owner's sign-in token for test chats (async; never used on customers' sites).
+  async function authHeaders(extra) {
+    const h = Object.assign({}, extra || {});
+    if (TEST && PREVIEW && typeof PREVIEW.getToken === "function") {
+      try { const t = await PREVIEW.getToken(); if (t) h.Authorization = "Bearer " + t; } catch (e) {}
+    }
+    return h;
+  }
   const botId = PREVIEW ? (PREVIEW.bot && PREVIEW.bot.id) || "preview" : url.searchParams.get("id");
   if (!botId) {
     console.warn("[Syncave] Missing bot id in script URL");
@@ -817,15 +833,15 @@
       if (!convId || !outbox.length) return;
       const batch = outbox.splice(0, 10);
       const pageUrl = String((PREVIEW && PREVIEW.pageUrl) || location.href).slice(0, 300);
-      try {
-        fetch(`${API}/api/bots/${encodeURIComponent(botId)}/${TEST ? "test-messages" : "conversations"}`, {
+      authHeaders({ "Content-Type": "application/json" }).then(function (headers) {
+        return fetch(`${API}/api/bots/${encodeURIComponent(botId)}/${TEST ? "test-messages" : "conversations"}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: headers,
           body: JSON.stringify(TEST ? { conversationId: convId, pageUrl, messages: batch } : { conversationId: convId, visitorId, pageUrl, messages: batch }),
           keepalive: true,
-          credentials: TEST ? "same-origin" : "omit",
-        }).catch(function () {});
-      } catch (e) {}
+          credentials: "omit",
+        });
+      }).catch(function () {});
       if (outbox.length) flushOutbox();
     }
     function pollOwner() {
@@ -834,7 +850,8 @@
       const url = TEST
         ? `${API}/api/bots/${encodeURIComponent(botId)}/test-messages/${encodeURIComponent(convId)}?${after}`
         : `${API}/api/bots/${encodeURIComponent(botId)}/conversations/${encodeURIComponent(convId)}/messages?visitor=${encodeURIComponent(visitorId)}${after ? "&" + after : ""}`;
-      fetch(url, { credentials: TEST ? "same-origin" : "omit" })
+      authHeaders()
+        .then((headers) => fetch(url, { headers: headers, credentials: "omit" }))
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!d || !Array.isArray(d.messages) || !d.messages.length) return;

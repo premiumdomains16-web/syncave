@@ -3,27 +3,20 @@
 -- Already have the first version (orders/unanswered as JSON on bots)? Run
 -- supabase/migrate-002-orders-unanswered.sql instead.
 --
--- The server talks to these tables with the service-role key, so Row Level Security
--- is enabled with no policies: the anon/publishable key can read nothing.
+-- The API (Edge Function "api") talks to these tables with the service-role key, so Row
+-- Level Security is enabled with no policies: the anon/publishable key can read nothing.
 
+-- Accounts: own bots and carry the plan. Sign-in is Supabase Auth; auth_id links the two.
 create table if not exists public.users (
   id             text primary key,
+  auth_id        uuid unique references auth.users (id) on delete set null,
   name           text not null,
   email          text not null unique,
   plan           text not null default 'free' check (plan in ('free', 'starter', 'business', 'agency')),
   requested_plan text check (requested_plan in ('starter', 'business', 'agency')),
-  password_hash  text not null,
+  password_hash  text,
   created_at     timestamptz not null default now()
 );
-
-create table if not exists public.sessions (
-  token_hash text primary key,
-  user_id    text not null references public.users (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null
-);
-create index if not exists sessions_expires_at_idx on public.sessions (expires_at);
-create index if not exists sessions_user_id_idx on public.sessions (user_id);
 
 create table if not exists public.bots (
   id                   text primary key,
@@ -256,7 +249,6 @@ end $$;
 -- ---------- security ----------
 
 alter table public.users             enable row level security;
-alter table public.sessions          enable row level security;
 alter table public.bots              enable row level security;
 alter table public.orders            enable row level security;
 alter table public.unanswered        enable row level security;

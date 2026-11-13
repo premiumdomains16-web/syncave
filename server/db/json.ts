@@ -1,13 +1,12 @@
-// JSON-file implementation: bots.json / users.json / sessions.json / orders.json /
-// unanswered.json in DATA_DIR, images on disk under DATA_DIR/uploads, and an
-// append-only JSONL global log. Zero setup — this is what runs when no Supabase
-// credentials are configured. Fine for one server and modest traffic.
+// JSON-file implementation of the Database interface, used by the automated API
+// tests (scripts/test-api.ts) so they never touch the real Supabase project.
+// Node-only (uses the file system); never bundled into the Edge Function.
 import fs from "fs/promises";
 import path from "path";
 import { isTestConversation, rid, type Bot, type ChatMessage, type Conversation, type Order, type Unanswered } from "../../shared/types.js";
 import { createJsonStore } from "../jsonStore.js";
 import { DATA_DIR, UPLOADS_DIR } from "../paths.js";
-import type { Database, SessionRecord, UserRecord } from "./types.js";
+import type { Database, UserRecord } from "./types.js";
 
 /** A bot row as stored on disk: the Bot minus its derived counters. */
 type BotRow = Omit<Bot, "orderCount" | "unansweredCount" | "unreadCount" | "needsHumanCount"> & { orders?: unknown; unanswered?: unknown };
@@ -45,7 +44,6 @@ const stripRow = ({ orders: _o, unanswered: _u, ...rest }: BotRow) => rest;
 export function createJsonDatabase(): Database {
   const bots = createJsonStore<BotRow>("bots.json", normalizeBot);
   const users = createJsonStore<UserRecord>("users.json");
-  const sessions = createJsonStore<SessionRecord>("sessions.json");
   const orders = createJsonStore<OrderRow>("orders.json");
   const unanswered = createJsonStore<UnansweredRow>("unanswered.json");
   const conversations = createJsonStore<Conversation>("conversations.json", (r) => ({ ...r, needsHuman: !!r.needsHuman }));
@@ -85,21 +83,13 @@ export function createJsonDatabase(): Database {
     users: {
       findByEmail: async (email) => (await users.read()).find((u) => u.email === email),
       findById: async (id) => (await users.read()).find((u) => u.id === id),
+      findByAuthId: async (authId) => (await users.read()).find((u) => u.authId === authId),
       count: async () => (await users.read()).length,
-      insert: (user) => users.mutate((all) => { all.push(user); }),
-    },
-    sessions: {
-      insert: (s) => sessions.mutate((all) => { all.push(s); }),
-      find: async (tokenHash) => (await sessions.read()).find((s) => s.tokenHash === tokenHash),
-      delete: (tokenHash) => sessions.mutate((all) => {
-        const i = all.findIndex((s) => s.tokenHash === tokenHash);
-        if (i !== -1) all.splice(i, 1);
+      insert: (user) => users.mutate((all) => {
+        if (all.some((u) => u.email === user.email || (user.authId && u.authId === user.authId))) throw new Error("duplicate user");
+        all.push(user);
       }),
-      pruneExpired: (now) => sessions.mutate((all) => {
-        const live = all.filter((s) => new Date(s.expiresAt) > now);
-        all.length = 0;
-        all.push(...live);
-      }),
+      linkAuth: (userId, authId) => users.mutate((all) => { const u = all.find((x) => x.id === userId); if (u && !u.authId) u.authId = authId; }),
     },
     bots: {
       listByOwner: async (ownerId) => {

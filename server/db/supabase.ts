@@ -6,12 +6,10 @@
 // functions (insert + cap in one transaction), and bots carry counters kept by
 // triggers, so listing a dashboard is one query regardless of traffic.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import ws from "ws";
 import { resilientFetch } from "../resilientFetch.js";
 import { log } from "../log.js";
-import path from "path";
 import { rid, TEST_VISITOR_PREFIX, type Bot, type ChatMessage, type Conversation, type Order, type Unanswered } from "../../shared/types.js";
-import type { Database, SessionRecord, UserRecord } from "./types.js";
+import type { Database, UserRecord } from "./types.js";
 
 const BUCKET = "uploads";
 
@@ -85,12 +83,11 @@ function userFromRow(r: any): UserRecord {
     email: r.email,
     plan: r.plan,
     createdAt: r.created_at,
-    passwordHash: r.password_hash,
+    ...(r.auth_id ? { authId: r.auth_id } : {}),
     ...(r.requested_plan ? { requestedPlan: r.requested_plan } : {}),
   };
 }
 
-const sessionFromRow = (r: any): SessionRecord => ({ tokenHash: r.token_hash, userId: r.user_id, createdAt: r.created_at, expiresAt: r.expires_at });
 
 /** Throws with a readable message instead of returning Supabase's { error } shape. */
 function ok<T>(res: { data: T; error: { message: string } | null }, what: string): T {
@@ -98,13 +95,12 @@ function ok<T>(res: { data: T; error: { message: string } | null }, what: string
   return res.data;
 }
 
-/** Server-side client: no session persistence, and a WebSocket transport so Node < 22 can construct it (realtime itself is unused). */
+/** Server-side client (service role): no session persistence; every call has a timeout and safe retries. */
 export function createSupabaseClient(url: string, serviceRoleKey: string): SupabaseClient {
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     // Timeouts on every call; safe (read) calls retry with backoff on network blips.
     global: { fetch: resilientFetch },
-    realtime: { transport: ws as unknown as typeof WebSocket },
   });
 }
 
@@ -122,6 +118,13 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
         const rows = ok(await sb.from("users").select("*").eq("id", id).limit(1), "users.findById");
         return rows?.[0] ? userFromRow(rows[0]) : undefined;
       },
+      findByAuthId: async (authId) => {
+        const rows = ok(await sb.from("users").select("*").eq("auth_id", authId).limit(1), "users.findByAuthId");
+        return rows?.[0] ? userFromRow(rows[0]) : undefined;
+      },
+      linkAuth: async (userId, authId) => {
+        ok(await sb.from("users").update({ auth_id: authId }).eq("id", userId).is("auth_id", null), "users.linkAuth");
+      },
       count: async () => {
         const res = await sb.from("users").select("id", { count: "exact", head: true });
         if (res.error) throw new Error(`Supabase users.count: ${res.error.message}`);
@@ -130,20 +133,9 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
       insert: async (u) => {
         ok(await sb.from("users").insert({
           id: u.id, name: u.name, email: u.email, plan: u.plan, requested_plan: u.requestedPlan ?? null,
-          password_hash: u.passwordHash, created_at: u.createdAt,
+          auth_id: u.authId ?? null, created_at: u.createdAt,
         }), "users.insert");
       },
-    },
-    sessions: {
-      insert: async (s) => {
-        ok(await sb.from("sessions").insert({ token_hash: s.tokenHash, user_id: s.userId, created_at: s.createdAt, expires_at: s.expiresAt }), "sessions.insert");
-      },
-      find: async (tokenHash) => {
-        const rows = ok(await sb.from("sessions").select("*").eq("token_hash", tokenHash).limit(1), "sessions.find");
-        return rows?.[0] ? sessionFromRow(rows[0]) : undefined;
-      },
-      delete: async (tokenHash) => { ok(await sb.from("sessions").delete().eq("token_hash", tokenHash), "sessions.delete"); },
-      pruneExpired: async (now) => { ok(await sb.from("sessions").delete().lte("expires_at", now.toISOString()), "sessions.prune"); },
     },
     bots: {
       listByOwner: async (ownerId) => {
@@ -227,7 +219,8 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
     uploads: {
       // originalName/mimetype come from checkImage() (detected from the file's bytes), not from the browser.
       save: async ({ buffer, originalName, mimetype }) => {
-        const name = `${Date.now()}_${rid(6)}${path.extname(originalName).toLowerCase()}`;
+        const ext = (originalName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
+        const name = `${Date.now()}_${rid(6)}${ext}`;
         const up = await sb.storage.from(BUCKET).upload(name, buffer, { contentType: mimetype, upsert: false });
         if (up.error) throw new Error(`Supabase storage upload: ${up.error.message}`);
         return sb.storage.from(BUCKET).getPublicUrl(name).data.publicUrl;

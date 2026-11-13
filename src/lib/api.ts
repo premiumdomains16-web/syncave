@@ -1,10 +1,19 @@
-// Thin typed wrapper around the dashboard API (server/routes/bots.ts).
+// Thin typed wrapper around the dashboard API (server/app.ts, running as the Supabase
+// Edge Function "api"). Every call carries the Supabase Auth access token.
 import type { Bot, BotPatch, ChatMessage, Conversation, Order, Unanswered } from '@shared/types';
+import { accessToken, API_BASE } from './supabase';
+
+async function authed(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await accessToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(`${API_BASE}${path}`, { ...init, headers });
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, init);
+    res = await authed(path, init);
   } catch {
     throw new Error('Could not reach the server.');
   }
@@ -48,7 +57,16 @@ export const api = {
   testReplies: (id: string, cid: string, after?: string) =>
     request<{ messages: { id: string; text: string; createdAt: string }[] }>(`/api/bots/${id}/test-messages/${cid}${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   deleteTestConversations: (id: string) => request<{ deleted: number }>(`/api/bots/${id}/test-conversations`, { method: 'DELETE' }),
-  ordersCsvUrl: (id: string) => `/api/bots/${id}/orders/export/csv`,
+  /** Downloads all orders as a CSV file (fetched with the sign-in token, then saved). */
+  downloadOrdersCsv: async (id: string) => {
+    const res = await authed(`/api/bots/${id}/orders/export/csv`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Download failed (${res.status})`);
+    const name = res.headers.get('content-disposition')?.match(/filename="?([^";]+)/)?.[1] ?? `orders-${id}.csv`;
+    const href = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  },
   upload: (id: string, field: 'logoUrl' | 'backgroundImageUrl', file: File) => {
     const form = new FormData();
     form.append('fieldName', field);

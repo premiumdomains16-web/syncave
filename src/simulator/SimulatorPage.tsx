@@ -2,7 +2,8 @@
 //   ?url=<site>   demo bot (public; used from the landing page)
 //   ?bot=<id>     the owner's *draft* bot on its own site (login required). Locked to the
 //                 site's saved address: a ?url= param is ignored and the address can't be edited.
-// The site is a server-side snapshot in a sandboxed iframe (see server/routes/simulate.ts);
+// The API fetches the site (server/app.ts, POST /api/simulate) and the page is shown in a
+// sandboxed iframe via srcdoc with no same-origin access, so its scripts can't touch Syncave;
 // the real widget runs in this page, layered over the frame, in preview mode.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, CircleAlert, ExternalLink, Globe, Loader2, Lock, Monitor, RotateCw, Smartphone } from 'lucide-react';
@@ -11,10 +12,12 @@ import { LogoMark } from '@/components/Logo';
 import { LangToggle, useCopy, useLang, type Lang } from '@/i18n';
 import { useAuth } from '@/auth';
 import { hostname } from '@/lib/format';
+import { api } from '@/lib/api';
+import { accessToken, API_BASE } from '@/lib/supabase';
 
 export const PENDING_SITE_KEY = 'syncave_pending_site';
 
-interface Snapshot { id: string; url: string; title: string; lang: Lang; }
+interface Snapshot { id: number; url: string; title: string; lang: Lang; html: string; }
 interface PreviewBot {
   id: string; name: string; welcomeMessage: string; fallbackMessage: string; themeColor: string;
   logoUrl: string | null; backgroundImageUrl: string | null; enableOrders: boolean;
@@ -127,8 +130,7 @@ export function SimulatorPage() {
       return;
     }
     if (status !== 'signedIn') return;
-    fetch('/api/bots')
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    api.listBots()
       .then((bots: Bot[]) => {
         const b = bots.find((x) => x.id === botId);
         if (b) setOwnerBot(b); else setError('not-found');
@@ -140,12 +142,12 @@ export function SimulatorPage() {
   const load = async (url: string) => {
     setLoading(true); setError(null); setSnapshot(null);
     try {
-      const res = await fetch('/api/simulate', {
+      const res = await fetch(`${API_BASE}/api/simulate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'failed');
-      setSnapshot(data);
+      setSnapshot({ ...data, id: Date.now() });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -169,7 +171,8 @@ export function SimulatorPage() {
     if (!bot || !layerRef.current || mounted.current) return;
     mounted.current = true;
     // Owner previewing their own draft: chats are saved to the Inbox as test conversations.
-    (window as any).SyncavePreview = { bot, container: layerRef.current, ...(botId ? { testLog: true, pageUrl: siteUrl } : {}) };
+    // api + getToken: the widget talks to the API Edge Function, signed in as the owner for test chats.
+    (window as any).SyncavePreview = { bot, container: layerRef.current, api: API_BASE, ...(botId ? { testLog: true, pageUrl: siteUrl, getToken: accessToken } : {}) };
     const s = document.createElement('script');
     s.src = '/widget.js';
     document.body.appendChild(s);
@@ -271,7 +274,7 @@ export function SimulatorPage() {
             {snapshot && (
               <iframe
                 key={snapshot.id}
-                src={`/api/simulate/${snapshot.id}`}
+                srcDoc={snapshot.html}
                 title={snapshot.title}
                 sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                 referrerPolicy="no-referrer"

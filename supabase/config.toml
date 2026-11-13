@@ -1,0 +1,9 @@
+# Supabase CLI settings for deploying the "api" Edge Function (npm run deploy:api).
+project_id = "syncave"
+
+[functions.api]
+# The function checks the sign-in token itself, because the chat widget's
+# endpoints are public and must work without a login.
+verify_jwt = false
+# Built by scripts/build-api.mjs from server/ (npm run build:api).
+entrypoint = "./functions/api/index.js"

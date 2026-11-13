@@ -21,7 +21,10 @@ const COPY = {
       wrong: 'Incorrect email or password.', taken: 'An account with this email already exists. Try logging in.',
       tooMany: 'Too many attempts. Please wait a few minutes and try again.', network: 'Could not reach the server. Check your connection.',
       generic: 'Something went wrong. Please try again.',
+      notConfirmed: 'Please confirm your email first. Open the link we sent you, then log in.',
+      weak: 'Please choose a stronger password.',
     },
+    confirm: { title: 'Check your email', body: (email: string) => `We sent a confirmation link to ${email}. Open it to activate your account, then log in.`, action: 'Go to log in' },
     back: 'Back to home',
   },
   ar: {
@@ -34,7 +37,10 @@ const COPY = {
       wrong: 'البريد الإلكتروني أو كلمة السر غلط.', taken: 'فيه حساب بالبريد ده بالفعل. جرّب تسجّل دخولك.',
       tooMany: 'محاولات كتير. استنى دقايق وجرّب تاني.', network: 'مش قادرين نوصل للسيرفر. اتأكد من الإنترنت.',
       generic: 'حصلت مشكلة. جرّب تاني.',
+      notConfirmed: 'من فضلك أكّد بريدك الإلكتروني الأول. افتح اللينك اللي بعتناهولك وبعدين سجّل دخولك.',
+      weak: 'من فضلك اختار كلمة سر أقوى.',
     },
+    confirm: { title: 'شوف بريدك الإلكتروني', body: (email: string) => `بعتنا لينك تأكيد على ${email}. افتحه علشان تفعّل حسابك، وبعدين سجّل دخولك.`, action: 'روح لتسجيل الدخول' },
     back: 'الرجوع للرئيسية',
   },
 };
@@ -61,6 +67,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmSent, setConfirmSent] = useState(false);
 
   // Already logged in? Go straight to the dashboard.
   useEffect(() => {
@@ -79,13 +86,19 @@ export function AuthPage({ mode }: { mode: Mode }) {
     setBusy(true);
     try {
       if (mode === 'login') await login(email.trim(), password);
-      else await signup({ name: name.trim(), email: email.trim(), password, plan: pickedPlan ?? undefined });
+      else if ((await signup({ name: name.trim(), email: email.trim(), password, plan: pickedPlan ?? undefined })) === 'confirm') {
+        setConfirmSent(true);
+        setBusy(false);
+        return;
+      }
       // Full load: the dashboard is a separate area with its own layout and direction.
       window.location.assign(next);
     } catch (err) {
       const status = err instanceof AuthError ? err.status : -1;
       setError(
         status === 401 ? t.errors.wrong
+          : status === 403 ? t.errors.notConfirmed
+          : status === 422 ? t.errors.weak
           : status === 409 ? t.errors.taken
           : status === 429 ? t.errors.tooMany
           : status === 0 ? t.errors.network
@@ -153,6 +166,16 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
         <main className="relative flex-1 flex items-center justify-center px-4 py-10">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="w-full max-w-md">
+            {confirmSent ? (
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-7 sm:p-8 shadow-pop lg:shadow-none lg:border-0 lg:p-4 text-center">
+                <span className="mx-auto w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center"><MessageSquare className="w-6 h-6" /></span>
+                <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900">{t.confirm.title}</h1>
+                <p className="mt-2 text-sm text-slate-600 leading-relaxed" dir="auto">{t.confirm.body(email.trim())}</p>
+                <a {...linkProps('/login')} onClick={(e) => { e.preventDefault(); navigateTo('/login'); }} className="mt-6 inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:border-brand-300 hover:text-brand-700">
+                  {t.confirm.action}
+                </a>
+              </div>
+            ) : (
             <div className="rounded-3xl border border-slate-200/80 bg-white p-7 sm:p-8 shadow-pop lg:shadow-none lg:border-0 lg:p-4">
               <h1 className="text-2xl sm:text-[1.75rem] font-bold tracking-tight text-slate-900">{m.title}</h1>
               <p className="mt-1.5 text-sm text-slate-500">{m.subtitle}</p>
@@ -210,13 +233,14 @@ export function AuthPage({ mode }: { mode: Mode }) {
                 </button>
               </form>
             </div>
+            )}
 
-            <p className="mt-6 text-center text-sm text-slate-600">
+            {!confirmSent && <p className="mt-6 text-center text-sm text-slate-600">
               {m.switchText}{' '}
               <a {...linkProps(switchHref)} onClick={(e) => { e.preventDefault(); setError(null); navigateTo(switchHref); }} className="font-semibold text-brand-600 hover:text-brand-700">
                 {m.switchLink}
               </a>
-            </p>
+            </p>}
           </motion.div>
         </main>
       </div>

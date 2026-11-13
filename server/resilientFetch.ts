@@ -2,8 +2,9 @@
 // requests that are safe to repeat. Used by the Supabase client so a slow or
 // briefly unavailable database fails fast instead of hanging a request.
 import { log } from "./log.js";
+import { env } from "./env.js";
 
-const TIMEOUT_MS = Number(process.env.DB_TIMEOUT_MS) || 10_000;
+const TIMEOUT_MS = Number(env("DB_TIMEOUT_MS")) || 10_000;
 const RETRIES = 2;                 // so at most 3 attempts
 const BASE_DELAY_MS = 200;         // 200 ms, then 400 ms (+ jitter)
 const RETRY_STATUS = new Set([502, 503, 504]);

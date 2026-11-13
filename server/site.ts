@@ -1,5 +1,5 @@
 // Fetching and inspecting the customer's own website.
-import * as cheerio from "cheerio";
+import * as cheerio from "cheerio/slim"; // slim = no Node-only network code, runs in Edge Functions
 import { fetchPage } from "./safeFetch.js";
 
 /** Accepts "example.com" or "https://example.com/" and returns a canonical http(s) URL, or null. */

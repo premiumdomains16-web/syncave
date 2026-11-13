@@ -53,9 +53,9 @@ export function OrdersTab({ bot, onCount }: { bot: Bot; onCount: (n: number) => 
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="secondary" icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />} onClick={refresh} disabled={loading}>Refresh</Button>
             {total > 0 && !isNativeApp && (
-              <a href={api.ordersCsvUrl(bot.id)} className="btn-glossy inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 text-white shadow-brand">
-                <Download className="w-4 h-4" /> Export CSV
-              </a>
+              <Button icon={<Download className="w-4 h-4" />} onClick={() => api.downloadOrdersCsv(bot.id).catch((e) => notify('err', (e as Error).message))}>
+                Export CSV
+              </Button>
             )}
           </div>
         }
