@@ -13,3 +13,6 @@ public/uploads/
 
 # Local backups of DATA_DIR (npm run backup)
 backups/
+
+# Local editor/assistant settings
+.claude/settings.local.json
