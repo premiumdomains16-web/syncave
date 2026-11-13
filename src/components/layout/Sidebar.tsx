@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ArrowUpRight, BookOpen, LayoutGrid, LifeBuoy, Plus, Search, Sparkles, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { PRICING_URL, usePlan } from '@/components/PlanLock';
+import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 import { AccountMenu } from './AccountMenu';
 import { hasUnpublishedChanges, type Bot } from '@shared/types';
 import type { Route } from '@/hooks/useRoute';
@@ -115,8 +116,10 @@ export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite,
         {plan !== 'agency' && (
           <div className="relative mx-3 mb-2 rounded-2xl surface-ink text-white p-4 overflow-hidden">
             <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center mb-2.5"><Sparkles className="w-4 h-4 text-brand-300" /></span>
-            <div className="text-sm font-semibold">Upgrade your plan</div>
-            <p className="text-[11px] text-white/60 mt-0.5 leading-relaxed">You&apos;re on {planName}. Get more sites, questions and orders.</p>
+            <div className="text-sm font-semibold">{PAID_PLANS_AVAILABLE ? 'Upgrade your plan' : 'Paid plans coming soon'}</div>
+            <p className="text-[11px] text-white/60 mt-0.5 leading-relaxed">
+              {PAID_PLANS_AVAILABLE ? <>You&apos;re on {planName}. Get more sites, questions and orders.</> : <>You&apos;re on {planName}. More sites, unlimited questions and order collection are on the way.</>}
+            </p>
             <a href={PRICING_URL} target="_blank" rel="noopener" className="mt-3 w-full inline-flex items-center justify-center gap-1 rounded-xl bg-gold-500 hover:bg-gold-600 px-3 py-2 text-xs font-semibold text-white transition-colors">
               See plans <ArrowUpRight className="w-3.5 h-3.5" />
             </a>

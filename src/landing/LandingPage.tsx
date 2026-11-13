@@ -12,6 +12,7 @@ import { LangToggle, useCopy, useLang } from '@/i18n';
 import { useAuth } from '@/auth';
 import { linkProps } from '@/hooks/usePath';
 import { LANDING_COPY, PLANS, SUPPORT_EMAIL, yearlyPerMonth, type LandingCopy } from './content';
+import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 
 const FEATURE_ICONS = [Languages, ShieldCheck, LayoutTemplate, ShoppingBag, Palette, GitBranch];
 const PROOF_ICONS = [Languages, Code2, ShieldCheck];
@@ -516,14 +517,20 @@ function Pricing({ c }: { c: LandingCopy }) {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
           {PLANS.map((plan, i) => {
             const p = c.pricing.plans[plan.id];
+            // Until paid plans launch, only Free can be started; it becomes the highlighted card.
+            const soon = !PAID_PLANS_AVAILABLE && plan.id !== 'free';
+            const highlighted = PAID_PLANS_AVAILABLE ? !!plan.highlighted : plan.id === 'free';
             const price = plan.monthly == null ? null : yearly ? yearlyPerMonth(plan.monthly) : plan.monthly;
             const href = plan.id === 'agency' ? `mailto:${SUPPORT_EMAIL}?subject=Syncave%20Agency` : `/signup${plan.id === 'free' ? '' : `?plan=${plan.id}`}`;
             const card = (
-              <div className={`relative flex flex-col h-full rounded-2xl bg-white p-6 ${plan.highlighted ? 'rounded-[calc(1rem-1.5px)]' : 'border border-slate-200/80 shadow-card hover:shadow-card-hover transition-shadow'}`}>
-                {plan.highlighted && (
-                  <span className="absolute -top-3.5 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 rounded-full bg-gold-500 px-3 py-1 text-xs font-semibold text-white whitespace-nowrap shadow-cta">{c.pricing.popular}</span>
+              <div className={`relative flex flex-col h-full rounded-2xl bg-white p-6 ${highlighted ? 'rounded-[calc(1rem-1.5px)]' : 'border border-slate-200/80 shadow-card hover:shadow-card-hover transition-shadow'}`}>
+                {highlighted && (
+                  <span className="absolute -top-3.5 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 rounded-full bg-gold-500 px-3 py-1 text-xs font-semibold text-white whitespace-nowrap shadow-cta">{PAID_PLANS_AVAILABLE ? c.pricing.popular : c.pricing.availableNow}</span>
                 )}
-                <h3 className="text-lg font-bold text-slate-900">{p.name}</h3>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                  {p.name}
+                  {soon && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{c.pricing.comingSoon}</span>}
+                </h3>
                 <p className="mt-1 text-sm text-slate-500 min-h-[2.5rem]">{p.tagline}</p>
                 <div className="mt-5 min-h-[4.5rem]">
                   {price == null ? (
@@ -555,19 +562,28 @@ function Pricing({ c }: { c: LandingCopy }) {
                     </li>
                   ))}
                 </ul>
-                <a
-                  {...(href.startsWith('/') ? linkProps(href) : { href })}
-                  className={`mt-8 block rounded-xl px-4 py-2.5 text-center text-sm font-semibold transition-[background-color,border-color,color,transform] active:scale-[0.98] ${
-                    plan.highlighted ? 'btn-glossy bg-gold-500 text-white hover:bg-gold-600 shadow-cta' : 'border border-slate-300 bg-white text-slate-700 hover:border-brand-600 hover:text-brand-700'
-                  }`}
-                >
-                  {p.cta}
-                </a>
+                {soon ? (
+                  <span
+                    aria-disabled="true"
+                    className="mt-8 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-center text-sm font-semibold border border-dashed border-slate-300 bg-slate-50 text-slate-500 cursor-not-allowed select-none"
+                  >
+                    <Clock className="w-4 h-4" /> {c.pricing.comingSoon}
+                  </span>
+                ) : (
+                  <a
+                    {...(href.startsWith('/') ? linkProps(href) : { href })}
+                    className={`mt-8 block rounded-xl px-4 py-2.5 text-center text-sm font-semibold transition-[background-color,border-color,color,transform] active:scale-[0.98] ${
+                      highlighted ? 'btn-glossy bg-gold-500 text-white hover:bg-gold-600 shadow-cta' : 'border border-slate-300 bg-white text-slate-700 hover:border-brand-600 hover:text-brand-700'
+                    }`}
+                  >
+                    {p.cta}
+                  </a>
+                )}
               </div>
             );
             return (
-              <Reveal key={plan.id} delay={i * 0.07} className={plan.highlighted ? 'h-full lg:-my-3' : 'h-full'}>
-                {plan.highlighted ? (
+              <Reveal key={plan.id} delay={i * 0.07} className={highlighted ? 'h-full lg:-my-3' : 'h-full'}>
+                {highlighted ? (
                   <div className="gradient-ring rounded-2xl h-full shadow-[0_20px_50px_-20px_rgba(21,122,110,0.45)]">{card}</div>
                 ) : card}
               </Reveal>

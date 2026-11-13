@@ -47,6 +47,7 @@ export interface LandingCopy {
   pricing: {
     eyebrow: string; title: string; subtitle: string; monthly: string; yearly: string; yearlyBadge: string;
     perMonth: string; currency: string; free: string; custom: string; billedYearly: string; popular: string; soon: string;
+    comingSoon: string; availableNow: string;
     plans: Record<Plan, PlanCopy>; footnote: string;
   };
   faq: { eyebrow: string; title: string; items: { q: string; a: string }[] };
@@ -128,6 +129,7 @@ const en: LandingCopy = {
     subtitle: 'Start free. Upgrade when your chatbot is bringing you customers.',
     monthly: 'Monthly', yearly: 'Yearly', yearlyBadge: '2 months free',
     perMonth: '/ month', currency: 'EGP', free: 'Free', custom: 'Custom', billedYearly: 'billed yearly', popular: 'Most popular', soon: 'Soon',
+    comingSoon: 'Coming soon', availableNow: 'Available now',
     plans: {
       free: {
         name: 'Free', tagline: 'Try Syncave on your website', cta: 'Start free',
@@ -146,7 +148,7 @@ const en: LandingCopy = {
         features: [{ text: 'Unlimited client websites' }, { text: 'Reseller pricing' }, { text: 'Everything in Business' }, { text: 'Your own branding (white-label)', soon: true }],
       },
     },
-    footnote: 'Paid plans are being activated personally during launch — sign up and we’ll contact you to set yours up. Prices include no hidden fees.',
+    footnote: 'Paid plans are coming soon. Start free today and we’ll let you know when they launch. Prices include no hidden fees.',
   },
   faq: {
     eyebrow: 'FAQ',
@@ -316,6 +318,7 @@ const ar: LandingCopy = {
     subtitle: 'ابدأ مجاناً، ورقّي باقتك لما الشات بوت يبدأ يجيبلك عملاء.',
     monthly: 'شهري', yearly: 'سنوي', yearlyBadge: 'شهرين مجاناً',
     perMonth: '/ شهرياً', currency: 'جنيه', free: 'مجاناً', custom: 'حسب الاحتياج', billedYearly: 'بيتدفع سنوياً', popular: 'الأكثر طلباً', soon: 'قريباً',
+    comingSoon: 'قريباً', availableNow: 'متاحة دلوقتي',
     plans: {
       free: {
         name: 'مجانية', tagline: 'جرّب Syncave على موقعك', cta: 'ابدأ مجاناً',
@@ -334,7 +337,7 @@ const ar: LandingCopy = {
         features: [{ text: 'مواقع عملاء بلا حدود' }, { text: 'أسعار خاصة للموزعين' }, { text: 'كل مميزات الأعمال' }, { text: 'علامتك التجارية الخاصة', soon: true }],
       },
     },
-    footnote: 'الباقات المدفوعة بنفعّلها بنفسنا في فترة الإطلاق — سجّل وهنتواصل معاك علشان نجهّز باقتك. من غير أي رسوم مخفية.',
+    footnote: 'الباقات المدفوعة قريباً. ابدأ مجاناً النهارده، وهنبلغك أول ما تتاح. من غير أي رسوم مخفية.',
   },
   faq: {
     eyebrow: 'أسئلة شائعة',

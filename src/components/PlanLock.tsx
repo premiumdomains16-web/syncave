@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { ArrowUpRight, Lock, Sparkles } from 'lucide-react';
 import type { Plan } from '@shared/types';
-import { limitsFor, nextPlanWhere, PLAN_NAMES, type PlanLimits } from '@shared/plans';
+import { limitsFor, nextPlanWhere, PAID_PLANS_AVAILABLE, PLAN_NAMES, type PlanLimits } from '@shared/plans';
 import { useAuth } from '@/auth';
 
 export const PRICING_URL = '/#pricing';
@@ -43,7 +43,9 @@ export function PlanNotice({ title, children, plan, need }: { title: ReactNode; 
         <div className="text-sm font-semibold text-slate-900">{title}</div>
         {children && <div className="text-xs text-slate-600 mt-0.5 leading-relaxed">{children}</div>}
       </div>
-      <UpgradeLink className="text-xs shrink-0 sm:mt-1 ms-11 sm:ms-0">{next ? `Get ${PLAN_NAMES[next]}` : 'See plans'}</UpgradeLink>
+      {PAID_PLANS_AVAILABLE
+        ? <UpgradeLink className="text-xs shrink-0 sm:mt-1 ms-11 sm:ms-0">{next ? `Get ${PLAN_NAMES[next]}` : 'See plans'}</UpgradeLink>
+        : <span className="text-xs font-semibold text-slate-500 shrink-0 sm:mt-1 ms-11 sm:ms-0">{next ? `${PLAN_NAMES[next]} plan coming soon` : 'Paid plans coming soon'}</span>}
     </div>
   );
 }

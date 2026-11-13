@@ -7,6 +7,7 @@ import { TemplateChatPreview } from '@/components/TemplateChatPreview';
 import { BLANK_TEMPLATE, TEMPLATES, type BotTemplate } from '@shared/templates';
 import { Button } from '@/components/ui';
 import { PlanNotice, PRICING_URL, usePlan } from '@/components/PlanLock';
+import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 
 const ALL_TEMPLATES: BotTemplate[] = [BLANK_TEMPLATE, ...TEMPLATES];
 
@@ -151,7 +152,7 @@ export function CreateSiteModal({ open, dismissible, onClose, onCreate, initialU
                   <CircleAlert className="w-4 h-4 shrink-0 text-amber-600" />
                   <span>
                     Your {planName} plan includes {limits.sites} website{limits.sites === 1 ? '' : 's'} and you've used {siteCount === 1 ? 'it' : 'them all'}.
-                    Delete a site or upgrade to add another.
+                    {PAID_PLANS_AVAILABLE ? 'Delete a site or upgrade to add another.' : 'Delete a site to add another. Paid plans with more websites are coming soon.'}
                   </span>
                 </div>
               ) : (

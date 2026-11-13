@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { motion } from 'motion/react';
 import { Check, CircleAlert, Eye, EyeOff, Loader2, MessageSquare } from 'lucide-react';
 import type { Plan } from '@shared/types';
+import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 import { LogoMark } from '@/components/Logo';
 import { LangToggle, useCopy } from '@/i18n';
 import { AuthError, useAuth } from '@/auth';
@@ -59,7 +60,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const params = new URLSearchParams(window.location.search);
   const next = safeNext(params.get('next'));
   const plan = params.get('plan') as Plan | null;
-  const pickedPlan = mode === 'signup' && plan && PAID_PLANS.includes(plan) ? plan : null;
+  const pickedPlan = PAID_PLANS_AVAILABLE && mode === 'signup' && plan && PAID_PLANS.includes(plan) ? plan : null;
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

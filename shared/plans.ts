@@ -31,6 +31,12 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 
 export const PLAN_ORDER: Plan[] = ["free", "starter", "business", "agency"];
 
+/**
+ * Paid plans can't be bought yet: the pricing page shows them as "Coming soon",
+ * sign-up is Free only, and upgrade hints say "coming soon". Set to true at launch.
+ */
+export const PAID_PLANS_AVAILABLE = false;
+
 export const PLAN_NAMES: Record<Plan, string> = { free: "Free", starter: "Starter", business: "Business", agency: "Agency" };
 
 /** Limits for a plan; accounts without a plan (legacy data) are treated as Free. */

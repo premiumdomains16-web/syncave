@@ -14,7 +14,7 @@ import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { isTestConversation, pickContent, rid, TEST_VISITOR_PREFIX, type Bot, type BotPatch, type ChatMessage, type Order, type Plan, type QA, type User } from "../shared/types.js";
 import { findTemplate } from "../shared/templates.js";
-import { formatLimit, limitsFor, nextPlanWhere, PLAN_NAMES, publishBlockers, type PlanLimits } from "../shared/plans.js";
+import { formatLimit, limitsFor, nextPlanWhere, PAID_PLANS_AVAILABLE, PLAN_NAMES, publishBlockers, type PlanLimits } from "../shared/plans.js";
 import { questionKey, scriptOf } from "../shared/normalize.js";
 import { db } from "./db/index.js";
 import { deleteOwnedBot, findBot, findOwnedBot, insertBot, listOwnedBots, mutateOwnedBot, NotFound } from "./store.js";
@@ -47,7 +47,7 @@ const MAX_UPLOAD = 5 * 1024 * 1024;
 /** 403 with a message that names the plan and, when one exists, the cheapest plan that lifts the limit. */
 function planError(plan: Plan, what: string, ok: (l: PlanLimits) => boolean): HttpError {
   const next = nextPlanWhere(plan, ok);
-  const hint = next ? ` Upgrade to ${PLAN_NAMES[next]} to unlock this.` : "";
+  const hint = !next ? "" : PAID_PLANS_AVAILABLE ? ` Upgrade to ${PLAN_NAMES[next]} to unlock this.` : ` It's part of the ${PLAN_NAMES[next]} plan, coming soon.`;
   return new HttpError(403, `${what}${hint}`);
 }
 
