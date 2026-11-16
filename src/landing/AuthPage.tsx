@@ -46,7 +46,7 @@ const COPY = {
   },
 };
 
-const PAID_PLANS: Plan[] = ['starter', 'business', 'agency'];
+const PAID_PLANS: Plan[] = ['starter'];
 
 /** Only allow redirects back into this app (never to another site). */
 function safeNext(raw: string | null): string {

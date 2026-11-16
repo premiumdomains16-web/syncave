@@ -30,6 +30,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 };
 
 export const PLAN_ORDER: Plan[] = ["free", "starter", "business", "agency"];
+/** Plans offered as upgrades (in order). Business/Agency are only set up by hand. */
+const UPGRADE_PATH: Plan[] = ["free", "starter"];
 
 /**
  * Whether customers can buy paid plans (manual InstaPay / Vodafone Cash payment, see
@@ -46,9 +48,9 @@ export function limitsFor(plan: Plan | null | undefined): PlanLimits {
 
 /** The cheapest plan above `from` whose limits satisfy `ok`, or null if none does. */
 export function nextPlanWhere(from: Plan, ok: (l: PlanLimits) => boolean): Plan | null {
-  const start = PLAN_ORDER.indexOf(from) + 1;
-  for (const p of PLAN_ORDER.slice(start)) if (ok(PLAN_LIMITS[p])) return p;
-  return null;
+  const i = UPGRADE_PATH.indexOf(from);
+  if (i === -1) return null;
+  return UPGRADE_PATH.slice(i + 1).find((p) => ok(PLAN_LIMITS[p])) ?? null;
 }
 
 export const formatLimit = (n: number | null) => (n === null ? "Unlimited" : n.toLocaleString("en-US"));

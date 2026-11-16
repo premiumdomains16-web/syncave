@@ -11,7 +11,7 @@ import { TemplateChatPreview } from '@/components/TemplateChatPreview';
 import { LangToggle, useCopy, useLang } from '@/i18n';
 import { useAuth } from '@/auth';
 import { linkProps } from '@/hooks/usePath';
-import { LANDING_COPY, PLANS, SUPPORT_EMAIL, yearlyPerMonth, type LandingCopy } from './content';
+import { LANDING_COPY, PLANS, SUPPORT_EMAIL, type LandingCopy } from './content';
 import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 
 const FEATURE_ICONS = [Languages, ShieldCheck, LayoutTemplate, ShoppingBag, Palette, GitBranch];
@@ -515,13 +515,14 @@ function Pricing({ c }: { c: LandingCopy }) {
           </div>
         </Reveal>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
+        <div className="grid sm:grid-cols-2 gap-5 items-stretch max-w-3xl mx-auto">
           {PLANS.map((plan, i) => {
             const p = c.pricing.plans[plan.id];
             // Until paid plans launch, only Free can be started; it becomes the highlighted card.
             const soon = !PAID_PLANS_AVAILABLE && plan.id !== 'free';
             const highlighted = PAID_PLANS_AVAILABLE ? !!plan.highlighted : plan.id === 'free';
-            const price = plan.monthly == null ? null : yearly ? yearlyPerMonth(plan.monthly) : plan.monthly;
+            const price = plan.monthly == null ? null : yearly && plan.yearly != null ? plan.yearly : plan.monthly;
+            const perLabel = yearly && plan.yearly != null ? c.pricing.perYear : c.pricing.perMonth;
             // Paid plans go to Billing (signing up first if needed); Agency is custom-priced.
             const href = plan.id === 'agency' ? `mailto:${SUPPORT_EMAIL}?subject=Syncave%20Agency`
               : plan.id === 'free' ? (status === 'signedIn' ? '/app' : '/signup')
@@ -547,9 +548,9 @@ function Pricing({ c }: { c: LandingCopy }) {
                         <AnimatePresence mode="popLayout" initial={false}>
                           <motion.span key={price} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="text-4xl font-bold text-slate-900 tabular-nums tracking-tight">{fmt(price)}</motion.span>
                         </AnimatePresence>
-                        <span className="text-sm font-medium text-slate-500">{c.pricing.currency} {c.pricing.perMonth}</span>
+                        <span className="text-sm font-medium text-slate-500">{c.pricing.currency} {perLabel}</span>
                       </div>
-                      {yearly && <div className="text-xs text-slate-500 mt-1">{c.pricing.billedYearly}</div>}
+                      {yearly && plan.yearly != null && <div className="text-xs text-slate-500 mt-1">≈ {fmt(Math.round(plan.yearly / 12))} {c.pricing.currency} {c.pricing.perMonth}</div>}
                     </>
                   )}
                 </div>

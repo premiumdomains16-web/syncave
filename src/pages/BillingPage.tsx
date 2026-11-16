@@ -2,7 +2,7 @@
 // details, then wait for an admin to approve (see /api/billing in server/app.ts).
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, CircleCheck, Clock, Copy, CreditCard, ImagePlus, Smartphone, Wallet, X } from 'lucide-react';
-import { PAID_PLANS, PAYMENT_DETAILS, PAYMENT_DETAILS_SET, priceFor, type BillingPeriod, type PaidPlan, type PaymentMethod } from '@shared/billing';
+import { PAID_PLANS, PAYMENT_DETAILS, PAYMENT_DETAILS_SET, priceFor, yearlySavingPct, type BillingPeriod, type PaidPlan, type PaymentMethod } from '@shared/billing';
 import { formatLimit, limitsFor, PLAN_NAMES } from '@shared/plans';
 import { api, type BillingInfo, type OwnPayment } from '@/lib/api';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -70,11 +70,11 @@ export function BillingPage({ initialPlan }: { initialPlan?: PaidPlan }) {
             <form onSubmit={submit} className="space-y-6">
               {/* 1. Plan */}
               <Card title="1 · Choose a plan" action={<PeriodToggle value={period} onChange={setPeriod} />}>
-                <div className="grid sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Plan">
+                <div className="grid gap-3 max-w-md" role="radiogroup" aria-label="Plan">
                   {PAID_PLANS.map((p) => <PlanOption key={p} plan={p} period={period} active={plan === p} onClick={() => setPlan(p)} />)}
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
-                  Need more than 5 websites? The Agency plan is priced per agency. <a className="font-semibold text-brand-600 hover:text-brand-700" href={`mailto:${SUPPORT_EMAIL}?subject=Syncave%20Agency`}>Contact us</a>.
+                  Need more websites, or a plan for your agency? <a className="font-semibold text-brand-600 hover:text-brand-700" href={`mailto:${SUPPORT_EMAIL}?subject=Syncave%20plan`}>Contact us</a>.
                 </p>
               </Card>
 
@@ -90,12 +90,12 @@ export function BillingPage({ initialPlan }: { initialPlan?: PaidPlan }) {
                   </Alert>
                 ) : method === 'instapay' ? (
                   <PayDetails
-                    rows={[{ label: 'InstaPay address', value: PAYMENT_DETAILS.instapay.address }, { label: 'Name', value: PAYMENT_DETAILS.instapay.name }, { label: 'Amount', value: String(amount), suffix: 'EGP' }]}
-                    steps={['Open the InstaPay app.', 'Choose “Send money” → “Payment address (IPA)”.', 'Paste the address above and send the exact amount.', 'Keep the receipt: you need its reference number below.']}
+                    rows={[{ label: /@/.test(PAYMENT_DETAILS.instapay.address) ? 'InstaPay address' : 'InstaPay number', value: PAYMENT_DETAILS.instapay.address }, { label: 'Name', value: PAYMENT_DETAILS.instapay.name }, { label: 'Amount', value: String(amount), suffix: 'EGP' }].filter((r) => r.value)}
+                    steps={['Open the InstaPay app and choose “Send money”.', /@/.test(PAYMENT_DETAILS.instapay.address) ? 'Choose “Payment address (IPA)” and paste the address above.' : 'Choose “Mobile number” and enter the number above.', 'Send the exact amount shown.', 'Keep the receipt: you need its reference number below.']}
                   />
                 ) : (
                   <PayDetails
-                    rows={[{ label: 'Vodafone Cash number', value: PAYMENT_DETAILS.vodafoneCash.number }, { label: 'Name', value: PAYMENT_DETAILS.vodafoneCash.name }, { label: 'Amount', value: String(amount), suffix: 'EGP' }]}
+                    rows={[{ label: 'Vodafone Cash number', value: PAYMENT_DETAILS.vodafoneCash.number }, { label: 'Name', value: PAYMENT_DETAILS.vodafoneCash.name }, { label: 'Amount', value: String(amount), suffix: 'EGP' }].filter((r) => r.value)}
                     steps={['Open Ana Vodafone, or dial *9*7*number*amount# from your Vodafone Cash line.', 'Send the exact amount to the number above.', 'Keep the SMS or receipt: you need its transaction number below.']}
                   />
                 )}
@@ -162,7 +162,7 @@ function PeriodToggle({ value, onChange }: { value: BillingPeriod; onChange: (p:
     <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold" role="group" aria-label="Billing period">
       {(['monthly', 'yearly'] as BillingPeriod[]).map((p) => (
         <button key={p} type="button" onClick={() => onChange(p)} aria-pressed={value === p} className={`px-3 py-1.5 rounded-md transition-colors ${value === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-          {p === 'monthly' ? 'Monthly' : <>Yearly <span className="ms-1 rounded-full bg-gold-100 px-1.5 py-px text-[10px] text-gold-800">2 months free</span></>}
+          {p === 'monthly' ? 'Monthly' : <>Yearly <span className="ms-1 rounded-full bg-gold-100 px-1.5 py-px text-[10px] text-gold-800">Save {yearlySavingPct('starter')}%</span></>}
         </button>
       ))}
     </div>

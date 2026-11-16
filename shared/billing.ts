@@ -2,43 +2,48 @@
 // and who can approve payments. Used by the API (server/app.ts) and the dashboard.
 import type { Plan } from "./types.js";
 
-/** Plans customers can buy themselves. Agency is custom-priced ("Contact us"). */
-export type PaidPlan = "starter" | "business";
-export const PAID_PLANS: PaidPlan[] = ["starter", "business"];
+/** The plan customers can buy. (Business/Agency still exist for accounts set up by hand.) */
+export type PaidPlan = "starter";
+export const PAID_PLANS: PaidPlan[] = ["starter"];
 
 export type BillingPeriod = "monthly" | "yearly";
 export type PaymentMethod = "instapay" | "vodafone_cash";
 export type PaymentStatus = "pending" | "approved" | "rejected";
 
-/** Monthly price in EGP. Yearly = 10 months (2 months free). Keep in sync with the pricing page. */
-export const MONTHLY_PRICE_EGP: Record<PaidPlan, number> = { starter: 399, business: 1499 };
+/** Prices in EGP: the single source for the pricing page, the Billing page and the API. */
+export const PRICES_EGP: Record<PaidPlan, Record<BillingPeriod, number>> = {
+  starter: { monthly: 150, yearly: 1200 },
+};
 
 export function priceFor(plan: PaidPlan, period: BillingPeriod): number {
-  const m = MONTHLY_PRICE_EGP[plan];
-  return period === "yearly" ? m * 10 : m;
+  return PRICES_EGP[plan][period];
+}
+
+/** How much yearly saves vs. 12 monthly payments, in percent (150 × 12 = 1800 → 1200 saves 33%). */
+export function yearlySavingPct(plan: PaidPlan): number {
+  const p = PRICES_EGP[plan];
+  return Math.round((1 - p.yearly / (p.monthly * 12)) * 100);
 }
 
 /**
  * Where customers send the money. Shown on the dashboard's Billing page.
- * TODO(owner): replace the placeholders with your real InstaPay address and wallet number.
+ * `name` is optional: when set, it's shown so customers can check the recipient name.
  */
 export const PAYMENT_DETAILS = {
   instapay: {
-    /** InstaPay payment address (IPA), e.g. yourname@instapay */
-    address: "yourname@instapay",
-    /** Name the customer will see when sending */
-    name: "Syncave",
+    /** InstaPay mobile number (or payment address, e.g. name@instapay) */
+    address: "01028847909",
+    name: "",
   },
   vodafoneCash: {
     /** Vodafone Cash wallet number */
-    number: "01000000000",
-    name: "Syncave",
+    number: "01028847909",
+    name: "",
   },
 };
 
-/** True once the placeholders above have been replaced. */
-export const PAYMENT_DETAILS_SET =
-  PAYMENT_DETAILS.instapay.address !== "yourname@instapay" && PAYMENT_DETAILS.vodafoneCash.number !== "01000000000";
+/** True once real payment details are filled in above. */
+export const PAYMENT_DETAILS_SET = !!PAYMENT_DETAILS.instapay.address && !!PAYMENT_DETAILS.vodafoneCash.number;
 
 /**
  * Accounts that can review and approve payments (Admin page). Only list emails whose

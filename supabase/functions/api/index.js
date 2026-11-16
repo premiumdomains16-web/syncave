@@ -2373,16 +2373,16 @@ var PLAN_LIMITS = {
   business: { sites: 5, questionsPerSite: null, orders: true, ordersKept: 5e3, conversationsKept: 1e4, branding: true, uploadMB: 5 },
   agency: { sites: null, questionsPerSite: null, orders: true, ordersKept: null, conversationsKept: null, branding: true, uploadMB: 5 }
 };
-var PLAN_ORDER = ["free", "starter", "business", "agency"];
+var UPGRADE_PATH = ["free", "starter"];
 var PAID_PLANS_AVAILABLE = true;
 var PLAN_NAMES = { free: "Free", starter: "Starter", business: "Business", agency: "Agency" };
 function limitsFor(plan) {
   return PLAN_LIMITS[plan && plan in PLAN_LIMITS ? plan : "free"];
 }
 function nextPlanWhere(from, ok2) {
-  const start = PLAN_ORDER.indexOf(from) + 1;
-  for (const p of PLAN_ORDER.slice(start)) if (ok2(PLAN_LIMITS[p])) return p;
-  return null;
+  const i = UPGRADE_PATH.indexOf(from);
+  if (i === -1) return null;
+  return UPGRADE_PATH.slice(i + 1).find((p) => ok2(PLAN_LIMITS[p])) ?? null;
 }
 var formatLimit = (n) => n === null ? "Unlimited" : n.toLocaleString("en-US");
 function publishBlockers(plan, bot) {
@@ -2410,26 +2410,26 @@ function scriptOf(s) {
 }
 
 // shared/billing.ts
-var PAID_PLANS = ["starter", "business"];
-var MONTHLY_PRICE_EGP = { starter: 399, business: 1499 };
+var PAID_PLANS = ["starter"];
+var PRICES_EGP = {
+  starter: { monthly: 150, yearly: 1200 }
+};
 function priceFor(plan, period) {
-  const m = MONTHLY_PRICE_EGP[plan];
-  return period === "yearly" ? m * 10 : m;
+  return PRICES_EGP[plan][period];
 }
 var PAYMENT_DETAILS = {
   instapay: {
-    /** InstaPay payment address (IPA), e.g. yourname@instapay */
-    address: "yourname@instapay",
-    /** Name the customer will see when sending */
-    name: "Syncave"
+    /** InstaPay mobile number (or payment address, e.g. name@instapay) */
+    address: "01028847909",
+    name: ""
   },
   vodafoneCash: {
     /** Vodafone Cash wallet number */
-    number: "01000000000",
-    name: "Syncave"
+    number: "01028847909",
+    name: ""
   }
 };
-var PAYMENT_DETAILS_SET = PAYMENT_DETAILS.instapay.address !== "yourname@instapay" && PAYMENT_DETAILS.vodafoneCash.number !== "01000000000";
+var PAYMENT_DETAILS_SET = !!PAYMENT_DETAILS.instapay.address && !!PAYMENT_DETAILS.vodafoneCash.number;
 var ADMIN_EMAILS = ["minataallap@gmail.com"];
 var isAdminEmail = (email) => !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());
 function effectivePlan(plan, expiresAt2, now = Date.now()) {

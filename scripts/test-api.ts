@@ -161,11 +161,13 @@ check("simulator refuses localhost", r.status === 400, String(r.status));
 
   r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, plan: "agency" }) });
   check("agency can't be bought online", r.status === 400);
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, plan: "business" }) });
+  check("business can't be bought online", r.status === 400);
   r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, reference: "" }) });
   check("reference required", r.status === 400);
   r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, amountEgp: "1" } as any) });
   const pay = r.data;
-  check("payment submitted, amount computed by server", r.status === 201 && pay.amountEgp === 399 && pay.status === "pending" && pay.hasProof === true && !("proofPath" in pay), JSON.stringify(pay));
+  check("payment submitted, amount computed by server", r.status === 201 && pay.amountEgp === 150 && pay.status === "pending" && pay.hasProof === true && !("proofPath" in pay), JSON.stringify(pay));
   r = await call("POST", "/api/billing/requests", { token: alice, body: payForm(good) });
   check("only one pending request at a time", r.status === 409);
   r = await call("GET", "/api/billing", { token: alice });
@@ -189,8 +191,8 @@ check("simulator refuses localhost", r.status === 400, String(r.status));
   check("plan active for about a month", acct?.plan === "starter" && days > 27 && days < 32, `${acct?.plan} ${days.toFixed(1)}d`);
 
   // Rejection with a reason; then a fresh request is allowed.
-  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, plan: "business", period: "yearly", method: "instapay", sender: "alice@instapay" }) });
-  check("yearly business = 10 months", r.status === 201 && r.data.amountEgp === 14990);
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, period: "yearly", method: "instapay", sender: "01098765432" }) });
+  check("yearly = 1200 EGP", r.status === 201 && r.data.amountEgp === 1200);
   r = await call("POST", `/api/admin/payments/${r.data.id}/reject`, { token: admin, json: { note: "Amount not received" } });
   check("reject with note", r.status === 200);
   r = await call("GET", "/api/billing", { token: alice });

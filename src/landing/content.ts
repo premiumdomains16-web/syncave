@@ -5,26 +5,25 @@
 // listed with `soon: true` and rendered with a "coming soon" badge.
 
 import type { Plan } from '@shared/types';
+import { PRICES_EGP, yearlySavingPct } from '@shared/billing';
 
 export const SUPPORT_EMAIL = 'hello@syncave.example'; // TODO: real inbox once the domain is live
 
-// ---------- Pricing (prices in EGP; change here only) ----------
+// ---------- Pricing (prices live in shared/billing.ts, shared with Billing and the API) ----------
 
 export interface PlanDef {
   id: Plan;
-  monthly: number | null; // null = custom / contact us
+  /** Monthly price; null = custom / contact us. */
+  monthly: number | null;
+  /** Price for 12 months, when a yearly option exists. */
+  yearly?: number;
   highlighted?: boolean;
 }
 
 export const PLANS: PlanDef[] = [
   { id: 'free', monthly: 0 },
-  { id: 'starter', monthly: 399 },
-  { id: 'business', monthly: 1499, highlighted: true },
-  { id: 'agency', monthly: null },
+  { id: 'starter', monthly: PRICES_EGP.starter.monthly, yearly: PRICES_EGP.starter.yearly, highlighted: true },
 ];
-
-/** Yearly billing = 10 months' price (2 months free). */
-export const yearlyPerMonth = (monthly: number) => Math.round((monthly * 10) / 12);
 
 // ---------- Copy ----------
 
@@ -46,7 +45,7 @@ export interface LandingCopy {
   };
   pricing: {
     eyebrow: string; title: string; subtitle: string; monthly: string; yearly: string; yearlyBadge: string;
-    perMonth: string; currency: string; free: string; custom: string; billedYearly: string; popular: string; soon: string;
+    perMonth: string; perYear: string; currency: string; free: string; custom: string; billedYearly: string; popular: string; soon: string;
     comingSoon: string; availableNow: string;
     plans: Record<Plan, PlanCopy>; footnote: string;
   };
@@ -127,7 +126,7 @@ const en: LandingCopy = {
     eyebrow: 'Pricing',
     title: 'Simple pricing in Egyptian pounds',
     subtitle: 'Start free. Upgrade when your chatbot is bringing you customers.',
-    monthly: 'Monthly', yearly: 'Yearly', yearlyBadge: '2 months free',
+    monthly: 'Monthly', yearly: 'Yearly', yearlyBadge: `Save ${yearlySavingPct('starter')}%`, perYear: '/ year',
     perMonth: '/ month', currency: 'EGP', free: 'Free', custom: 'Custom', billedYearly: 'billed yearly', popular: 'Most popular', soon: 'Soon',
     comingSoon: 'Coming soon', availableNow: 'Available now',
     plans: {
@@ -316,7 +315,7 @@ const ar: LandingCopy = {
     eyebrow: 'الأسعار',
     title: 'أسعار بسيطة بالجنيه المصري',
     subtitle: 'ابدأ مجاناً، ورقّي باقتك لما الشات بوت يبدأ يجيبلك عملاء.',
-    monthly: 'شهري', yearly: 'سنوي', yearlyBadge: 'شهرين مجاناً',
+    monthly: 'شهري', yearly: 'سنوي', yearlyBadge: `وفّر ${yearlySavingPct('starter')}٪`, perYear: '/ سنوياً',
     perMonth: '/ شهرياً', currency: 'جنيه', free: 'مجاناً', custom: 'حسب الاحتياج', billedYearly: 'بيتدفع سنوياً', popular: 'الأكثر طلباً', soon: 'قريباً',
     comingSoon: 'قريباً', availableNow: 'متاحة دلوقتي',
     plans: {
