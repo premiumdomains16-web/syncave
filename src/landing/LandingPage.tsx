@@ -490,6 +490,7 @@ function Templates({ c }: { c: LandingCopy }) {
 
 function Pricing({ c }: { c: LandingCopy }) {
   const { lang } = useLang();
+  const { status } = useAuth();
   const [yearly, setYearly] = useState(false);
   const fmt = (n: number) => new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-US').format(n);
 
@@ -521,7 +522,10 @@ function Pricing({ c }: { c: LandingCopy }) {
             const soon = !PAID_PLANS_AVAILABLE && plan.id !== 'free';
             const highlighted = PAID_PLANS_AVAILABLE ? !!plan.highlighted : plan.id === 'free';
             const price = plan.monthly == null ? null : yearly ? yearlyPerMonth(plan.monthly) : plan.monthly;
-            const href = plan.id === 'agency' ? `mailto:${SUPPORT_EMAIL}?subject=Syncave%20Agency` : `/signup${plan.id === 'free' ? '' : `?plan=${plan.id}`}`;
+            // Paid plans go to Billing (signing up first if needed); Agency is custom-priced.
+            const href = plan.id === 'agency' ? `mailto:${SUPPORT_EMAIL}?subject=Syncave%20Agency`
+              : plan.id === 'free' ? (status === 'signedIn' ? '/app' : '/signup')
+              : status === 'signedIn' ? `/app#/billing/${plan.id}` : `/signup?plan=${plan.id}`;
             const card = (
               <div className={`relative flex flex-col h-full rounded-2xl bg-white p-6 ${highlighted ? 'rounded-[calc(1rem-1.5px)]' : 'border border-slate-200/80 shadow-card hover:shadow-card-hover transition-shadow'}`}>
                 {highlighted && (

@@ -12,6 +12,10 @@ import { SiteView } from '@/features/site/SiteView';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { DocsPage } from '@/pages/DocsPage';
 import { HelpPage } from '@/pages/HelpPage';
+import { BillingPage } from '@/pages/BillingPage';
+import { AdminPage } from '@/pages/AdminPage';
+import { useAuth } from '@/auth';
+import { api } from '@/lib/api';
 import { PENDING_SITE_KEY } from '@/simulator/SimulatorPage';
 
 export default function App() {
@@ -33,6 +37,14 @@ export default function App() {
   const openCreate = (url?: string) => { setCreateUrl(url); setCreating(true); };
 
   const activeBot = route.view === 'site' ? bots.find((b) => b.id === route.botId) : undefined;
+  const { user } = useAuth();
+  const isAdmin = !!user?.isAdmin;
+  // Payments waiting for review (admin only): shown as a badge in the sidebar.
+  const [pendingPayments, setPendingPayments] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.adminPayments('pending').then((r) => setPendingPayments(r.payments.length)).catch(() => {});
+  }, [isAdmin]);
 
   useEffect(() => {
     const base = 'Syncave';
@@ -52,8 +64,8 @@ export default function App() {
 
   return (
     <div className="h-screen bg-slate-100 text-slate-900 font-sans antialiased flex overflow-hidden">
-      <Sidebar bots={bots} route={route} onNavigate={go} onAddSite={() => openCreate()} />
-      <MobileNav bots={bots} route={route} onNavigate={go} onAddSite={() => openCreate()} />
+      <Sidebar bots={bots} route={route} onNavigate={go} onAddSite={() => openCreate()} isAdmin={isAdmin} pendingPayments={pendingPayments} />
+      <MobileNav bots={bots} route={route} onNavigate={go} onAddSite={() => openCreate()} isAdmin={isAdmin} pendingPayments={pendingPayments} />
 
       <main className="flex-1 min-w-0 flex flex-col pt-14 lg:pt-0 bg-slate-100 relative isolate">
         {!loaded ? (
@@ -68,6 +80,12 @@ export default function App() {
           <DocsPage onContact={() => go({ view: 'help' })} />
         ) : route.view === 'help' ? (
           <HelpPage onOpenDocs={() => go({ view: 'docs' })} />
+        ) : route.view === 'billing' ? (
+          <BillingPage initialPlan={route.plan} />
+        ) : route.view === 'admin' ? (
+          isAdmin
+            ? <AdminPage onPendingCount={setPendingPayments} />
+            : <div className="flex-1 flex items-center justify-center"><EmptyState icon={<SearchX className="w-6 h-6" />} title="Page not found" /></div>
         ) : activeBot ? (
           <SiteView
             key={activeBot.id}

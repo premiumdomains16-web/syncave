@@ -32,10 +32,10 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 export const PLAN_ORDER: Plan[] = ["free", "starter", "business", "agency"];
 
 /**
- * Paid plans can't be bought yet: the pricing page shows them as "Coming soon",
- * sign-up is Free only, and upgrade hints say "coming soon". Set to true at launch.
+ * Whether customers can buy paid plans (manual InstaPay / Vodafone Cash payment, see
+ * shared/billing.ts). false = pricing shows "Coming soon" and sign-up is Free only.
  */
-export const PAID_PLANS_AVAILABLE = false;
+export const PAID_PLANS_AVAILABLE = true;
 
 export const PLAN_NAMES: Record<Plan, string> = { free: "Free", starter: "Starter", business: "Business", agency: "Agency" };
 

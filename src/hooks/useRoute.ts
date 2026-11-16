@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { PAID_PLANS, type PaidPlan } from '@shared/billing';
 
 export type SiteTab = 'qa' | 'inbox' | 'unanswered' | 'appearance' | 'embed' | 'orders' | 'verify';
 
@@ -6,6 +7,8 @@ export type Route =
   | { view: 'overview' }
   | { view: 'docs' }
   | { view: 'help' }
+  | { view: 'billing'; plan?: PaidPlan }
+  | { view: 'admin' }
   | { view: 'site'; botId: string; tab?: SiteTab };
 
 const TABS: SiteTab[] = ['qa', 'inbox', 'unanswered', 'appearance', 'embed', 'orders', 'verify'];
@@ -14,6 +17,8 @@ function parse(hash: string): Route {
   const [first, id, tab] = hash.replace(/^#\/?/, '').split('/');
   if (first === 'docs') return { view: 'docs' };
   if (first === 'help') return { view: 'help' };
+  if (first === 'billing') return { view: 'billing', plan: PAID_PLANS.includes(id as PaidPlan) ? (id as PaidPlan) : undefined };
+  if (first === 'admin') return { view: 'admin' };
   if (first === 'sites' && id) {
     return { view: 'site', botId: id, tab: TABS.includes(tab as SiteTab) ? (tab as SiteTab) : undefined };
   }
@@ -22,6 +27,7 @@ function parse(hash: string): Route {
 
 export function routeToHash(r: Route): string {
   if (r.view === 'site') return `#/sites/${r.botId}${r.tab ? `/${r.tab}` : ''}`;
+  if (r.view === 'billing') return `#/billing${r.plan ? `/${r.plan}` : ''}`;
   return `#/${r.view}`;
 }
 

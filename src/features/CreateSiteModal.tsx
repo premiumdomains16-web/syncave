@@ -164,8 +164,8 @@ export function CreateSiteModal({ open, dismissible, onClose, onCreate, initialU
                 </div>
               )}
               {atSiteLimit ? (
-                <a href={PRICING_URL} target="_blank" rel="noopener" className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-gold-500 hover:bg-gold-600 px-5 py-2.5 text-sm font-semibold text-white shadow-cta">
-                  See plans <ArrowRight className="w-4 h-4" />
+                <a href={PRICING_URL} onClick={onClose} className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-gold-500 hover:bg-gold-600 px-5 py-2.5 text-sm font-semibold text-white shadow-cta">
+                  Upgrade <ArrowRight className="w-4 h-4" />
                 </a>
               ) : (
                 <Button

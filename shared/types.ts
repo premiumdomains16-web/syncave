@@ -90,7 +90,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  /** The plan in effect now (a paid plan past its end date counts as free). */
   plan: Plan;
+  /** When the paid period ends; null for Free or plans without an end date. */
+  planExpiresAt?: string | null;
+  /** Can review payments (Admin page). Only set on the signed-in user's own record. */
+  isAdmin?: boolean;
   createdAt: string;
 }
 

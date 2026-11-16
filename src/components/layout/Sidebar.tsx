@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowUpRight, BookOpen, LayoutGrid, LifeBuoy, Plus, Search, Sparkles, X } from 'lucide-react';
+import { ArrowUpRight, BookOpen, CreditCard, LayoutGrid, LifeBuoy, Plus, Search, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
-import { PRICING_URL, usePlan } from '@/components/PlanLock';
+import { usePlan } from '@/components/PlanLock';
 import { PAID_PLANS_AVAILABLE } from '@shared/plans';
 import { AccountMenu } from './AccountMenu';
 import { hasUnpublishedChanges, type Bot } from '@shared/types';
@@ -15,10 +15,13 @@ interface Props {
   onAddSite: () => void;
   /** Rendered inside the mobile slide-in drawer instead of docked on desktop. */
   drawer?: boolean;
+  isAdmin?: boolean;
+  /** Payments waiting for review (admins). */
+  pendingPayments?: number;
   onClose?: () => void;
 }
 
-export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite, drawer, onClose }: Props) {
+export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite, drawer, onClose, isAdmin, pendingPayments = 0 }: Props) {
   // In the drawer, every choice also closes the menu.
   const onNavigate = (r: Route) => { navigate(r); onClose?.(); };
   const onAddSite = () => { addSite(); onClose?.(); };
@@ -48,6 +51,8 @@ export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite,
             <NavItem icon={<LayoutGrid className="w-4 h-4" />} label="Overview" active={route.view === 'overview'} onClick={() => onNavigate({ view: 'overview' })} roomy={drawer} />
             <NavItem icon={<BookOpen className="w-4 h-4" />} label="Docs" active={route.view === 'docs'} onClick={() => onNavigate({ view: 'docs' })} roomy={drawer} />
             <NavItem icon={<LifeBuoy className="w-4 h-4" />} label="Help" active={route.view === 'help'} onClick={() => onNavigate({ view: 'help' })} roomy={drawer} />
+            <NavItem icon={<CreditCard className="w-4 h-4" />} label="Billing" active={route.view === 'billing'} onClick={() => onNavigate({ view: 'billing' })} roomy={drawer} />
+            {isAdmin && <NavItem icon={<ShieldCheck className="w-4 h-4" />} label="Payments" badge={pendingPayments} active={route.view === 'admin'} onClick={() => onNavigate({ view: 'admin' })} roomy={drawer} />}
           </ul>
 
           <div className="px-3 mb-2 flex items-center justify-between">
@@ -113,16 +118,16 @@ export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite,
           </ul>
         </nav>
 
-        {plan !== 'agency' && (
+        {plan === 'free' && (
           <div className="relative mx-3 mb-2 rounded-2xl surface-ink text-white p-4 overflow-hidden">
             <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center mb-2.5"><Sparkles className="w-4 h-4 text-brand-300" /></span>
             <div className="text-sm font-semibold">{PAID_PLANS_AVAILABLE ? 'Upgrade your plan' : 'Paid plans coming soon'}</div>
             <p className="text-[11px] text-white/60 mt-0.5 leading-relaxed">
               {PAID_PLANS_AVAILABLE ? <>You&apos;re on {planName}. Get more sites, questions and orders.</> : <>You&apos;re on {planName}. More sites, unlimited questions and order collection are on the way.</>}
             </p>
-            <a href={PRICING_URL} target="_blank" rel="noopener" className="mt-3 w-full inline-flex items-center justify-center gap-1 rounded-xl bg-gold-500 hover:bg-gold-600 px-3 py-2 text-xs font-semibold text-white transition-colors">
-              See plans <ArrowUpRight className="w-3.5 h-3.5" />
-            </a>
+            <button onClick={() => onNavigate({ view: 'billing' })} className="mt-3 w-full inline-flex items-center justify-center gap-1 rounded-xl bg-gold-500 hover:bg-gold-600 px-3 py-2 text-xs font-semibold text-white transition-colors">
+              Upgrade <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
         <div className="relative px-5 py-2 text-[11px] text-slate-400 flex items-center gap-3">
@@ -136,7 +141,7 @@ export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite,
   );
 }
 
-function NavItem({ icon, label, active, onClick, roomy }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void; roomy?: boolean }) {
+function NavItem({ icon, label, active, onClick, roomy, badge }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void; roomy?: boolean; badge?: number }) {
   return (
     <li>
       <button
@@ -147,7 +152,8 @@ function NavItem({ icon, label, active, onClick, roomy }: { icon: ReactNode; lab
         }`}
       >
         <span className={active ? 'text-white' : 'text-slate-400'}>{icon}</span>
-        <span>{label}</span>
+        <span className="flex-1 text-start">{label}</span>
+        {!!badge && <span className={`min-w-[1.25rem] h-5 px-1.5 rounded-full text-[11px] font-semibold tabular-nums flex items-center justify-center ${active ? 'bg-white/25 text-white' : 'bg-gold-500 text-white'}`}>{badge}</span>}
       </button>
     </li>
   );

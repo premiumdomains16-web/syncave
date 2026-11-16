@@ -7,6 +7,7 @@ import { rid, type Plan, type User } from "../shared/types.js";
 import { db, type UserRecord } from "./db/index.js";
 import { HttpError } from "./errors.js";
 import { resilientFetch } from "./resilientFetch.js";
+import { effectivePlan } from "../shared/billing.js";
 
 /** Who a valid token belongs to, as reported by Supabase Auth. */
 export interface AuthIdentity {
@@ -41,8 +42,10 @@ export function supabaseTokenVerifier(url: string, serviceRoleKey: string): Veri
 
 const PAID: Plan[] = ["starter", "business", "agency"];
 
+/** What the dashboard sees: the plan in effect now (an expired paid plan counts as Free). */
 export function toPublicUser(u: UserRecord): User {
-  return { id: u.id, name: u.name, email: u.email, plan: u.plan, createdAt: u.createdAt };
+  const plan = effectivePlan(u.plan, u.planExpiresAt);
+  return { id: u.id, name: u.name, email: u.email, plan, planExpiresAt: plan === "free" ? null : u.planExpiresAt ?? null, createdAt: u.createdAt };
 }
 
 /**

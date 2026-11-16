@@ -8,10 +8,13 @@
 // - Bots carry read-only counters (orderCount / unansweredCount) so lists and
 //   badges need no extra queries.
 import type { Bot, ChatMessage, Conversation, Order, Plan, Unanswered, User } from "../../shared/types.js";
+import type { PaymentRequest, PaymentStatus } from "../../shared/billing.js";
 
 export interface UserRecord extends User {
   /** The Supabase Auth user id (auth.users.id) this account signs in with. */
   authId?: string;
+  /** When the paid plan ends (then it counts as Free); null = no end date. */
+  planExpiresAt?: string | null;
   /** Only on accounts created before Supabase Auth; no longer used for sign-in. */
   passwordHash?: string;
   /** Paid plan picked on the pricing page before billing exists — a sales lead to follow up. */
@@ -46,6 +49,24 @@ export interface Database {
     insert(user: UserRecord): Promise<void>;
     /** Connects an existing account (e.g. from before Supabase Auth) to a Supabase Auth user. */
     linkAuth(userId: string, authId: string): Promise<void>;
+    /** Sets the plan and when it ends (null = no end date). */
+    setPlan(userId: string, plan: Plan, expiresAt: string | null): Promise<void>;
+  };
+  payments: {
+    insert(p: PaymentRequest): Promise<void>;
+    get(id: string): Promise<PaymentRequest | undefined>;
+    /** A user's requests, newest first. */
+    listByUser(userId: string): Promise<PaymentRequest[]>;
+    /** Requests with a status, oldest first for pending (review queue), newest first otherwise. */
+    listByStatus(status: PaymentStatus, limit: number): Promise<PaymentRequest[]>;
+    /** Marks a pending request reviewed; returns false if it was no longer pending. */
+    review(id: string, status: Exclude<PaymentStatus, "pending">, note: string | null, at: string): Promise<boolean>;
+  };
+  /** Receipt screenshots, in private storage (never publicly readable). */
+  proofs: {
+    save(file: UploadInput): Promise<string>;
+    /** Short-lived URL for the admin to view a receipt. */
+    signedUrl(path: string, seconds: number): Promise<string | null>;
   };
   bots: {
     listByOwner(ownerId: string): Promise<Bot[]>;

@@ -1,6 +1,7 @@
 // Thin typed wrapper around the dashboard API (server/app.ts, running as the Supabase
 // Edge Function "api"). Every call carries the Supabase Auth access token.
-import type { Bot, BotPatch, ChatMessage, Conversation, Order, Unanswered } from '@shared/types';
+import type { Bot, BotPatch, ChatMessage, Conversation, Order, Plan, Unanswered } from '@shared/types';
+import type { PaymentRequest, PaymentStatus } from '@shared/billing';
 import { accessToken, API_BASE } from './supabase';
 
 async function authed(path: string, init: RequestInit = {}): Promise<Response> {
@@ -58,6 +59,11 @@ export const api = {
   testReplies: (id: string, cid: string, after?: string) =>
     request<{ messages: { id: string; text: string; createdAt: string }[] }>(`/api/bots/${id}/test-messages/${cid}${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   deleteTestConversations: (id: string) => request<{ deleted: number }>(`/api/bots/${id}/test-conversations`, { method: 'DELETE' }),
+  billing: () => request<BillingInfo>('/api/billing'),
+  submitPayment: (form: FormData) => request<OwnPayment>('/api/billing/requests', { method: 'POST', body: form }),
+  adminPayments: (status: PaymentStatus) => request<{ payments: AdminPayment[] }>(`/api/admin/payments?status=${status}`),
+  approvePayment: (id: string) => request<{ success: true; plan: string; planExpiresAt: string }>(`/api/admin/payments/${id}/approve`, { method: 'POST' }),
+  rejectPayment: (id: string, note: string) => request<{ success: true }>(`/api/admin/payments/${id}/reject`, json('POST', { note })),
   /** Downloads all orders as a CSV file (fetched with the sign-in token, then saved). */
   downloadOrdersCsv: async (id: string) => {
     const res = await authed(`/api/bots/${id}/orders/export/csv`);
@@ -77,6 +83,9 @@ export const api = {
 };
 
 export type VerifyMethod = 'meta' | 'snippet' | 'dns';
+export type OwnPayment = Omit<PaymentRequest, 'proofPath' | 'userId'> & { hasProof: boolean };
+export interface BillingInfo { plan: Plan; planExpiresAt: string | null; requests: OwnPayment[] }
+export type AdminPayment = Omit<PaymentRequest, 'proofPath'> & { proofUrl: string | null; user: { id: string; name: string; email: string; plan: Plan; planExpiresAt: string | null } | null };
 export interface InstallStatus { installed: boolean; scripts: { src: string; host: string; botId: string | null }[]; checkedUrl: string }
 
 /**

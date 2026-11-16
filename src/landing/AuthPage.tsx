@@ -16,7 +16,7 @@ const COPY = {
     login: { title: 'Welcome back', subtitle: 'Log in to manage your chatbots.', submit: 'Log in', switchText: "Don't have an account?", switchLink: 'Start free' },
     signup: { title: 'Create your account', subtitle: 'Free plan · No credit card needed.', submit: 'Create account', switchText: 'Already have an account?', switchLink: 'Log in' },
     name: 'Your name', email: 'Email', password: 'Password', passwordHint: 'At least 8 characters', show: 'Show password', hide: 'Hide password',
-    planNote: (plan: string) => `You picked the ${plan} plan. You'll start on Free right away, and we'll contact you to activate ${plan}.`,
+    planNote: (plan: string) => `You picked the ${plan} plan. After creating your account you can pay by InstaPay or Vodafone Cash, and we'll activate ${plan} once the payment is confirmed.`,
     errors: {
       name: 'Please enter your name.', email: 'Please enter a valid email address.', password: 'Password must be at least 8 characters.',
       wrong: 'Incorrect email or password.', taken: 'An account with this email already exists. Try logging in.',
@@ -32,7 +32,7 @@ const COPY = {
     login: { title: 'أهلاً بيك تاني', subtitle: 'سجّل دخولك علشان تدير الشات بوت بتاعك.', submit: 'تسجيل الدخول', switchText: 'معندكش حساب؟', switchLink: 'ابدأ مجاناً' },
     signup: { title: 'اعمل حسابك', subtitle: 'باقة مجانية · من غير كارت بنكي.', submit: 'إنشاء الحساب', switchText: 'عندك حساب؟', switchLink: 'سجّل دخولك' },
     name: 'اسمك', email: 'البريد الإلكتروني', password: 'كلمة السر', passwordHint: '٨ حروف على الأقل', show: 'إظهار كلمة السر', hide: 'إخفاء كلمة السر',
-    planNote: (plan: string) => `اخترت باقة ${plan}. هتبدأ على الباقة المجانية على طول، وهنتواصل معاك علشان نفعّل باقة ${plan}.`,
+    planNote: (plan: string) => `اخترت باقة ${plan}. بعد ما تعمل حسابك تقدر تدفع بإنستاباي أو فودافون كاش، وهنفعّل باقة ${plan} أول ما نأكد الدفع.`,
     errors: {
       name: 'من فضلك اكتب اسمك.', email: 'من فضلك اكتب بريد إلكتروني صحيح.', password: 'كلمة السر لازم تكون ٨ حروف على الأقل.',
       wrong: 'البريد الإلكتروني أو كلمة السر غلط.', taken: 'فيه حساب بالبريد ده بالفعل. جرّب تسجّل دخولك.',
@@ -93,7 +93,8 @@ export function AuthPage({ mode }: { mode: Mode }) {
         return;
       }
       // Full load: the dashboard is a separate area with its own layout and direction.
-      window.location.assign(next);
+      // Picked a paid plan on the pricing page: continue to payment.
+      window.location.assign(pickedPlan && pickedPlan !== 'agency' ? `/app#/billing/${pickedPlan}` : next);
     } catch (err) {
       const status = err instanceof AuthError ? err.status : -1;
       setError(

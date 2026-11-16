@@ -7,6 +7,7 @@ import { isTestConversation, rid, type Bot, type ChatMessage, type Conversation,
 import { createJsonStore } from "../jsonStore.js";
 import { DATA_DIR, UPLOADS_DIR } from "../paths.js";
 import type { Database, UserRecord } from "./types.js";
+import type { PaymentRequest } from "../../shared/billing.js";
 
 /** A bot row as stored on disk: the Bot minus its derived counters. */
 type BotRow = Omit<Bot, "orderCount" | "unansweredCount" | "unreadCount" | "needsHumanCount"> & { orders?: unknown; unanswered?: unknown };
@@ -48,6 +49,7 @@ export function createJsonDatabase(): Database {
   const unanswered = createJsonStore<UnansweredRow>("unanswered.json");
   const conversations = createJsonStore<Conversation>("conversations.json", (r) => ({ ...r, needsHuman: !!r.needsHuman }));
   const messages = createJsonStore<ChatMessage>("messages.json");
+  const payments = createJsonStore<PaymentRequest>("payments.json");
   const GLOBAL_LOG = path.join(DATA_DIR, "unanswered-global.jsonl");
 
   // One-time move of orders/unanswered that older versions kept inside bots.json.
@@ -90,6 +92,7 @@ export function createJsonDatabase(): Database {
         all.push(user);
       }),
       linkAuth: (userId, authId) => users.mutate((all) => { const u = all.find((x) => x.id === userId); if (u && !u.authId) u.authId = authId; }),
+      setPlan: (userId, plan, expiresAt) => users.mutate((all) => { const u = all.find((x) => x.id === userId); if (u) { u.plan = plan; u.planExpiresAt = expiresAt; } }),
     },
     bots: {
       listByOwner: async (ownerId) => {
@@ -218,6 +221,32 @@ export function createJsonDatabase(): Database {
         if (ids.size) await messages.mutate((all) => { for (let i = all.length - 1; i >= 0; i--) if (ids.has(all[i].conversationId)) all.splice(i, 1); });
         return ids.size;
       },
+    },
+    payments: {
+      insert: (p) => payments.mutate((all) => { all.push(p); }),
+      get: async (id) => (await payments.read()).find((p) => p.id === id),
+      listByUser: async (userId) => (await payments.read()).filter((p) => p.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      listByStatus: async (status, limit) => {
+        const rows = (await payments.read()).filter((p) => p.status === status);
+        rows.sort((a, b) => (status === "pending" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)));
+        return rows.slice(0, limit);
+      },
+      review: (id, status, note, at) => payments.mutate((all) => {
+        const p = all.find((x) => x.id === id);
+        if (!p || p.status !== "pending") return false;
+        p.status = status; p.note = note; p.reviewedAt = at;
+        return true;
+      }),
+    },
+    proofs: {
+      save: async ({ buffer, originalName }) => {
+        const dir = path.join(DATA_DIR, "proofs");
+        await fs.mkdir(dir, { recursive: true });
+        const name = `${Date.now()}_${rid(10)}${path.extname(originalName).toLowerCase()}`;
+        await fs.writeFile(path.join(dir, name), buffer);
+        return name;
+      },
+      signedUrl: async (p) => `file://proofs/${p}`,
     },
     uploads: {
       save: async ({ buffer, originalName }) => {

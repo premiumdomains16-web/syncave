@@ -148,7 +148,7 @@ const en: LandingCopy = {
         features: [{ text: 'Unlimited client websites' }, { text: 'Reseller pricing' }, { text: 'Everything in Business' }, { text: 'Your own branding (white-label)', soon: true }],
       },
     },
-    footnote: 'Paid plans are coming soon. Start free today and we’ll let you know when they launch. Prices include no hidden fees.',
+    footnote: 'Pay by InstaPay or Vodafone Cash. We activate your plan as soon as we confirm the payment, usually within 24 hours. No hidden fees.',
   },
   faq: {
     eyebrow: 'FAQ',
@@ -337,7 +337,7 @@ const ar: LandingCopy = {
         features: [{ text: 'مواقع عملاء بلا حدود' }, { text: 'أسعار خاصة للموزعين' }, { text: 'كل مميزات الأعمال' }, { text: 'علامتك التجارية الخاصة', soon: true }],
       },
     },
-    footnote: 'الباقات المدفوعة قريباً. ابدأ مجاناً النهارده، وهنبلغك أول ما تتاح. من غير أي رسوم مخفية.',
+    footnote: 'ادفع بإنستاباي أو فودافون كاش، وهنفعّل باقتك أول ما نأكد الدفع، غالباً خلال ٢٤ ساعة. من غير أي رسوم مخفية.',
   },
   faq: {
     eyebrow: 'أسئلة شائعة',

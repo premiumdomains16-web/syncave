@@ -10,6 +10,7 @@ import { resilientFetch } from "../resilientFetch.js";
 import { log } from "../log.js";
 import { rid, TEST_VISITOR_PREFIX, type Bot, type ChatMessage, type Conversation, type Order, type Unanswered } from "../../shared/types.js";
 import type { Database, UserRecord } from "./types.js";
+import type { PaymentRequest } from "../../shared/billing.js";
 
 const BUCKET = "uploads";
 
@@ -82,12 +83,21 @@ function userFromRow(r: any): UserRecord {
     name: r.name,
     email: r.email,
     plan: r.plan,
+    planExpiresAt: r.plan_expires_at ?? null,
     createdAt: r.created_at,
     ...(r.auth_id ? { authId: r.auth_id } : {}),
     ...(r.requested_plan ? { requestedPlan: r.requested_plan } : {}),
   };
 }
 
+
+const paymentFromRow = (r: any): PaymentRequest => ({
+  id: r.id, userId: r.user_id, plan: r.plan, period: r.period, amountEgp: r.amount_egp, method: r.method,
+  sender: r.sender, reference: r.reference, proofPath: r.proof_path ?? null, status: r.status, note: r.note ?? null,
+  createdAt: r.created_at, reviewedAt: r.reviewed_at ?? null,
+});
+
+const PROOFS_BUCKET = "payment-proofs";
 
 /** Throws with a readable message instead of returning Supabase's { error } shape. */
 function ok<T>(res: { data: T; error: { message: string } | null }, what: string): T {
@@ -121,6 +131,9 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
       findByAuthId: async (authId) => {
         const rows = ok(await sb.from("users").select("*").eq("auth_id", authId).limit(1), "users.findByAuthId");
         return rows?.[0] ? userFromRow(rows[0]) : undefined;
+      },
+      setPlan: async (userId, plan, expiresAt) => {
+        ok(await sb.from("users").update({ plan, plan_expires_at: expiresAt }).eq("id", userId), "users.setPlan");
       },
       linkAuth: async (userId, authId) => {
         ok(await sb.from("users").update({ auth_id: authId }).eq("id", userId).is("auth_id", null), "users.linkAuth");
@@ -224,6 +237,44 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
         const up = await sb.storage.from(BUCKET).upload(name, buffer, { contentType: mimetype, upsert: false });
         if (up.error) throw new Error(`Supabase storage upload: ${up.error.message}`);
         return sb.storage.from(BUCKET).getPublicUrl(name).data.publicUrl;
+      },
+    },
+    payments: {
+      insert: async (p) => {
+        ok(await sb.from("payment_requests").insert({
+          id: p.id, user_id: p.userId, plan: p.plan, period: p.period, amount_egp: p.amountEgp, method: p.method,
+          sender: p.sender, reference: p.reference, proof_path: p.proofPath, status: p.status, note: p.note, created_at: p.createdAt,
+        }), "payments.insert");
+      },
+      get: async (id) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("id", id).limit(1), "payments.get");
+        return rows?.[0] ? paymentFromRow(rows[0]) : undefined;
+      },
+      listByUser: async (userId) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(50), "payments.listByUser");
+        return (rows ?? []).map(paymentFromRow);
+      },
+      listByStatus: async (status, limit) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("status", status).order("created_at", { ascending: status === "pending" }).limit(limit), "payments.listByStatus");
+        return (rows ?? []).map(paymentFromRow);
+      },
+      review: async (id, status, note, at) => {
+        // Only a still-pending request can be reviewed, so two admins can't double-approve.
+        const rows = ok(await sb.from("payment_requests").update({ status, note, reviewed_at: at }).eq("id", id).eq("status", "pending").select("id"), "payments.review");
+        return (rows?.length ?? 0) > 0;
+      },
+    },
+    proofs: {
+      save: async ({ buffer, originalName, mimetype }) => {
+        const ext = (originalName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
+        const name = `${new Date().toISOString().slice(0, 7)}/${Date.now()}_${rid(10)}${ext}`;
+        const up = await sb.storage.from(PROOFS_BUCKET).upload(name, buffer, { contentType: mimetype, upsert: false });
+        if (up.error) throw new Error(`Supabase storage upload (proofs): ${up.error.message}`);
+        return name;
+      },
+      signedUrl: async (path, seconds) => {
+        const { data, error } = await sb.storage.from(PROOFS_BUCKET).createSignedUrl(path, seconds);
+        return error ? null : data.signedUrl;
       },
     },
     unansweredLog: {

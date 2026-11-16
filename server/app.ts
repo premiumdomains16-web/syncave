@@ -9,13 +9,14 @@
 //   - Dashboard routes: need `Authorization: Bearer <Supabase access token>` and only
 //     touch the caller's own bots.
 //   - Widget routes: public, called from customers' websites; rate-limited and bounded.
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { isTestConversation, pickContent, rid, TEST_VISITOR_PREFIX, type Bot, type BotPatch, type ChatMessage, type Order, type Plan, type QA, type User } from "../shared/types.js";
 import { findTemplate } from "../shared/templates.js";
 import { formatLimit, limitsFor, nextPlanWhere, PAID_PLANS_AVAILABLE, PLAN_NAMES, publishBlockers, type PlanLimits } from "../shared/plans.js";
 import { questionKey, scriptOf } from "../shared/normalize.js";
+import { effectivePlan, extendExpiry, isAdminEmail, PAID_PLANS, priceFor, type BillingPeriod, type PaidPlan, type PaymentMethod, type PaymentRequest, type PaymentStatus } from "../shared/billing.js";
 import { db } from "./db/index.js";
 import { deleteOwnedBot, findBot, findOwnedBot, insertBot, listOwnedBots, mutateOwnedBot, NotFound } from "./store.js";
 import { buildSitePreview, fetchSiteTitle, normalizeUrl } from "./site.js";
@@ -212,7 +213,7 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
     const bot = await findBot(c.req.param("id"));
     if (!bot?.published) throw new HttpError(404, "Bot is not published yet.");
     const owner = bot.ownerId ? await db().users.findById(bot.ownerId) : undefined;
-    const limits = limitsFor(owner?.plan);
+    const limits = limitsFor(owner ? effectivePlan(owner.plan, owner.planExpiresAt) : undefined);
     const existing = await db().conversations.get(conversationId);
     if (existing) {
       if (existing.botId !== bot.id || existing.visitorId !== visitorId) throw new HttpError(403, "Not your conversation");
@@ -275,7 +276,7 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
     if (!bot) throw new HttpError(404, "Bot not found");
     // Storage follows the owner's plan: whether orders are collected at all, and how many are kept.
     const owner = bot.ownerId ? await db().users.findById(bot.ownerId) : undefined;
-    const limits = limitsFor(owner?.plan);
+    const limits = limitsFor(owner ? effectivePlan(owner.plan, owner.planExpiresAt) : undefined);
     // Orders follow the live (published) setting — that's what visitors see.
     if (!bot.published?.enableOrders || !limits.orders) throw new HttpError(403, "Orders not enabled for this bot");
     const order: Order = {
@@ -314,7 +315,7 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
   const siteFetchLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, message: "Too many website checks. Please wait a few minutes." });
   const me = (c: Context<Env>) => c.get("user");
 
-  app.get("/api/me", dashLimit, signedIn, (c) => c.json({ user: me(c) }));
+  app.get("/api/me", dashLimit, signedIn, (c) => c.json({ user: { ...me(c), isAdmin: isAdminEmail(me(c).email) } }));
 
   app.get("/api/bots", dashLimit, signedIn, async (c) => c.json(await listOwnedBots(me(c).id)));
 
@@ -566,6 +567,118 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
   app.delete("/api/bots/:id/test-conversations", dashLimit, signedIn, async (c) => {
     const bot = await findOwnedBot(me(c).id, c.req.param("id"));
     return c.json({ deleted: await db().conversations.deleteTest(bot.id) });
+  });
+
+  // ---- Billing: manual InstaPay / Vodafone Cash payments ----
+  // The customer sends money, then submits the details here; an admin checks the
+  // receipt and approves, which activates the plan for the paid period.
+
+  // What the customer may see of their own request (never the storage path).
+  const ownPayment = ({ proofPath, userId: _u, ...rest }: PaymentRequest) => ({ ...rest, hasProof: !!proofPath });
+  const PERIODS: BillingPeriod[] = ["monthly", "yearly"];
+  const METHODS: PaymentMethod[] = ["instapay", "vodafone_cash"];
+  const payLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, message: "Too many payment submissions. Please try again later." });
+
+  app.get("/api/billing", dashLimit, signedIn, async (c) => {
+    const user = me(c);
+    const requests = await db().payments.listByUser(user.id);
+    c.header("Cache-Control", "no-store");
+    return c.json({ plan: user.plan, planExpiresAt: user.planExpiresAt ?? null, requests: requests.map(ownPayment) });
+  });
+
+  app.post("/api/billing/requests", dashLimit, payLimit, signedIn,
+    bodyLimit({ maxSize: MAX_UPLOAD + 64 * 1024, onError: (cc) => cc.json({ error: "The receipt image is larger than 5 MB." }, 413) }),
+    async (c) => {
+      if (!PAID_PLANS_AVAILABLE) throw new HttpError(403, "Paid plans aren't available yet.");
+      const form = await c.req.parseBody();
+      const field = (k: string) => (typeof form[k] === "string" ? (form[k] as string).trim() : "");
+      const plan = field("plan") as PaidPlan;
+      const period = field("period") as BillingPeriod;
+      const method = field("method") as PaymentMethod;
+      const sender = field("sender").slice(0, 100);
+      const reference = field("reference").slice(0, 100);
+      if (!PAID_PLANS.includes(plan)) throw new HttpError(400, "Choose a plan.");
+      if (!PERIODS.includes(period)) throw new HttpError(400, "Choose monthly or yearly.");
+      if (!METHODS.includes(method)) throw new HttpError(400, "Choose InstaPay or Vodafone Cash.");
+      if (sender.length < 4) throw new HttpError(400, method === "instapay" ? "Enter the InstaPay address or phone number you paid from." : "Enter the Vodafone Cash number you paid from.");
+      if (reference.length < 3) throw new HttpError(400, "Enter the transaction or reference number from your receipt.");
+
+      const user = me(c);
+      const mine = await db().payments.listByUser(user.id);
+      if (mine.some((p) => p.status === "pending")) throw new HttpError(409, "You already have a payment waiting for review. We'll activate it soon.");
+
+      // Receipt screenshot (optional, recommended): type checked from the bytes, stored privately.
+      let proofPath: string | null = null;
+      const file = form["proof"];
+      if (file instanceof File && file.size > 0) {
+        if (file.size > MAX_UPLOAD) throw new HttpError(413, "The receipt image is larger than 5 MB.");
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        proofPath = await db().proofs.save({ buffer: bytes, ...checkImage(bytes) });
+      }
+
+      const request: PaymentRequest = {
+        id: `pay_${rid(12)}`,
+        userId: user.id,
+        plan, period,
+        // The amount is always computed here, never taken from the browser.
+        amountEgp: priceFor(plan, period),
+        method, sender, reference, proofPath,
+        status: "pending", note: null,
+        createdAt: new Date().toISOString(), reviewedAt: null,
+      };
+      await db().payments.insert(request);
+      log.info("payment submitted", { requestId: c.get("requestId"), paymentId: request.id, plan, period, amountEgp: request.amountEgp, method });
+      return c.json(ownPayment(request), 201);
+    });
+
+  // ---- Admin: review payments ----
+  // Hidden from everyone else (404, not 403, so the route isn't advertised).
+  const adminOnly: MiddlewareHandler<Env> = async (c, next) => {
+    if (!isAdminEmail(c.get("user").email)) return c.json({ error: "Not found" }, 404);
+    await next();
+  };
+  const STATUSES: PaymentStatus[] = ["pending", "approved", "rejected"];
+
+  app.get("/api/admin/payments", dashLimit, signedIn, adminOnly, async (c) => {
+    const q = c.req.query("status") as PaymentStatus;
+    const status = STATUSES.includes(q) ? q : "pending";
+    const list = await db().payments.listByStatus(status, 100);
+    const payments = await Promise.all(list.map(async (p) => {
+      const u = await db().users.findById(p.userId);
+      const { proofPath, ...rest } = p;
+      return {
+        ...rest,
+        proofUrl: proofPath ? await db().proofs.signedUrl(proofPath, 600) : null,
+        user: u ? { id: u.id, name: u.name, email: u.email, plan: effectivePlan(u.plan, u.planExpiresAt), planExpiresAt: u.planExpiresAt ?? null } : null,
+      };
+    }));
+    c.header("Cache-Control", "no-store");
+    return c.json({ payments });
+  });
+
+  app.post("/api/admin/payments/:id/approve", dashLimit, signedIn, adminOnly, async (c) => {
+    const p = await db().payments.get(c.req.param("id"));
+    if (!p) throw new HttpError(404, "Payment not found");
+    if (p.status !== "pending") throw new HttpError(409, `This payment was already ${p.status}.`);
+    const u = await db().users.findById(p.userId);
+    if (!u) throw new HttpError(404, "The customer's account no longer exists.");
+    const now = new Date().toISOString();
+    if (!(await db().payments.review(p.id, "approved", null, now))) throw new HttpError(409, "This payment was already reviewed.");
+    // Paying again for the same active plan extends it; otherwise the new period starts today.
+    const expiresAt = extendExpiry({ plan: effectivePlan(u.plan, u.planExpiresAt), expiresAt: u.planExpiresAt }, p.plan, p.period);
+    await db().users.setPlan(u.id, p.plan, expiresAt);
+    log.info("payment approved", { paymentId: p.id, userId: u.id, plan: p.plan, expiresAt, by: me(c).id });
+    return c.json({ success: true, plan: p.plan, planExpiresAt: expiresAt });
+  });
+
+  app.post("/api/admin/payments/:id/reject", dashLimit, signedIn, adminOnly, async (c) => {
+    const b = await body(c);
+    const note = typeof b?.note === "string" ? b.note.trim().slice(0, 300) : "";
+    const p = await db().payments.get(c.req.param("id"));
+    if (!p) throw new HttpError(404, "Payment not found");
+    if (!(await db().payments.review(p.id, "rejected", note || null, new Date().toISOString()))) throw new HttpError(409, "This payment was already reviewed.");
+    log.info("payment rejected", { paymentId: p.id, by: me(c).id });
+    return c.json({ success: true });
   });
 
   app.notFound((c) => c.json({ error: "Not found" }, 404));

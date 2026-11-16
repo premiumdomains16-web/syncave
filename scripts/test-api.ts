@@ -148,6 +148,59 @@ check("simulator refuses localhost", r.status === 400, String(r.status));
   check("dns record value", dnsRecordValue("sb_abc") === "syncave-verification=sb_abc");
 }
 
+// --- billing: manual payments ---
+{
+  const pngBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])], { type: "image/png" });
+  const payForm = (fields: Record<string, string>, proof = true) => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(fields)) f.append(k, v);
+    if (proof) f.append("proof", pngBlob, "receipt.png");
+    return f;
+  };
+  const good = { plan: "starter", period: "monthly", method: "vodafone_cash", sender: "01012345678", reference: "TXN998877" };
+
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, plan: "agency" }) });
+  check("agency can't be bought online", r.status === 400);
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, reference: "" }) });
+  check("reference required", r.status === 400);
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, amountEgp: "1" } as any) });
+  const pay = r.data;
+  check("payment submitted, amount computed by server", r.status === 201 && pay.amountEgp === 399 && pay.status === "pending" && pay.hasProof === true && !("proofPath" in pay), JSON.stringify(pay));
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm(good) });
+  check("only one pending request at a time", r.status === 409);
+  r = await call("GET", "/api/billing", { token: alice });
+  check("customer sees own request", r.status === 200 && r.data.requests.length === 1 && r.data.plan === "free");
+
+  // Admin is limited to ADMIN_EMAILS.
+  r = await call("GET", "/api/admin/payments", { token: alice });
+  check("non-admin can't see admin routes (404)", r.status === 404);
+  const admin = "tok:auth-admin:minataallap@gmail.com:1:Mina";
+  r = await call("GET", "/api/me", { token: admin });
+  check("admin flagged on /me", r.data.user?.isAdmin === true);
+  r = await call("GET", "/api/admin/payments", { token: admin });
+  check("admin sees pending with receipt link", r.status === 200 && r.data.payments.length === 1 && !!r.data.payments[0].proofUrl && r.data.payments[0].user.email === "alice@example.com");
+  r = await call("POST", `/api/admin/payments/${pay.id}/approve`, { token: admin });
+  check("approve", r.status === 200 && r.data.plan === "starter");
+  r = await call("POST", `/api/admin/payments/${pay.id}/approve`, { token: admin });
+  check("can't approve twice", r.status === 409);
+  // Token cache is 30 s, so read the account directly to confirm the plan change.
+  const acct = await db().users.findByAuthId("auth-alice");
+  const days = (Date.parse(acct!.planExpiresAt!) - Date.now()) / 86400000;
+  check("plan active for about a month", acct?.plan === "starter" && days > 27 && days < 32, `${acct?.plan} ${days.toFixed(1)}d`);
+
+  // Rejection with a reason; then a fresh request is allowed.
+  r = await call("POST", "/api/billing/requests", { token: alice, body: payForm({ ...good, plan: "business", period: "yearly", method: "instapay", sender: "alice@instapay" }) });
+  check("yearly business = 10 months", r.status === 201 && r.data.amountEgp === 14990);
+  r = await call("POST", `/api/admin/payments/${r.data.id}/reject`, { token: admin, json: { note: "Amount not received" } });
+  check("reject with note", r.status === 200);
+  r = await call("GET", "/api/billing", { token: alice });
+  check("customer sees rejection reason", r.data.requests[0].status === "rejected" && r.data.requests[0].note === "Amount not received");
+  // An expired plan counts as Free.
+  await db().users.setPlan(acct!.id, "starter", new Date(Date.now() - 1000).toISOString());
+  const { toPublicUser } = await import("../server/auth.js");
+  check("expired plan counts as free", toPublicUser((await db().users.findById(acct!.id))!).plan === "free");
+}
+
 // --- delete ---
 r = await call("DELETE", `/api/bots/${bot.id}`, { token: alice });
 check("delete bot", r.status === 200);

@@ -7,12 +7,12 @@ import { Logo } from '@/components/Logo';
 import { Sidebar } from './Sidebar';
 
 /** Phones and tablets: a top bar with a menu button that slides in the same sidebar used on desktop. */
-export function MobileNav({ bots, route, onNavigate, onAddSite }: {
-  bots: Bot[]; route: Route; onNavigate: (r: Route) => void; onAddSite: () => void;
+export function MobileNav({ bots, route, onNavigate, onAddSite, isAdmin, pendingPayments }: {
+  bots: Bot[]; route: Route; onNavigate: (r: Route) => void; onAddSite: () => void; isAdmin?: boolean; pendingPayments?: number;
 }) {
   const [open, setOpen] = useState(false);
   const current = route.view === 'site' ? bots.find((b) => b.id === route.botId)?.name ?? 'Site'
-    : route.view === 'docs' ? 'Docs' : route.view === 'help' ? 'Help' : 'Overview';
+    : route.view === 'docs' ? 'Docs' : route.view === 'help' ? 'Help' : route.view === 'billing' ? 'Billing' : route.view === 'admin' ? 'Payments' : 'Overview';
 
   // Close on Escape, lock page scroll while open, and close if the screen grows to desktop size.
   useEffect(() => {
@@ -52,7 +52,7 @@ export function MobileNav({ bots, route, onNavigate, onAddSite }: {
         <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] animate-[fade-up_0.2s_ease-out]" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 left-0 shadow-pop animate-[slide-in-left_0.25s_cubic-bezier(0.22,1,0.36,1)]">
-            <Sidebar drawer bots={bots} route={route} onNavigate={onNavigate} onAddSite={onAddSite} onClose={() => setOpen(false)} />
+            <Sidebar drawer bots={bots} route={route} onNavigate={onNavigate} onAddSite={onAddSite} onClose={() => setOpen(false)} isAdmin={isAdmin} pendingPayments={pendingPayments} />
           </div>
         </div>,
         document.body,

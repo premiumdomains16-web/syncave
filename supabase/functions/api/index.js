@@ -2374,6 +2374,7 @@ var PLAN_LIMITS = {
   agency: { sites: null, questionsPerSite: null, orders: true, ordersKept: null, conversationsKept: null, branding: true, uploadMB: 5 }
 };
 var PLAN_ORDER = ["free", "starter", "business", "agency"];
+var PAID_PLANS_AVAILABLE = true;
 var PLAN_NAMES = { free: "Free", starter: "Starter", business: "Business", agency: "Agency" };
 function limitsFor(plan) {
   return PLAN_LIMITS[plan && plan in PLAN_LIMITS ? plan : "free"];
@@ -2406,6 +2407,40 @@ function scriptOf(s) {
   const arabic = (s.match(/[؀-ۿ]/g) || []).length;
   const latin = (s.match(/[A-Za-z]/g) || []).length;
   return arabic > latin ? "ar" : "en";
+}
+
+// shared/billing.ts
+var PAID_PLANS = ["starter", "business"];
+var MONTHLY_PRICE_EGP = { starter: 399, business: 1499 };
+function priceFor(plan, period) {
+  const m = MONTHLY_PRICE_EGP[plan];
+  return period === "yearly" ? m * 10 : m;
+}
+var PAYMENT_DETAILS = {
+  instapay: {
+    /** InstaPay payment address (IPA), e.g. yourname@instapay */
+    address: "yourname@instapay",
+    /** Name the customer will see when sending */
+    name: "Syncave"
+  },
+  vodafoneCash: {
+    /** Vodafone Cash wallet number */
+    number: "01000000000",
+    name: "Syncave"
+  }
+};
+var PAYMENT_DETAILS_SET = PAYMENT_DETAILS.instapay.address !== "yourname@instapay" && PAYMENT_DETAILS.vodafoneCash.number !== "01000000000";
+var ADMIN_EMAILS = ["minataallap@gmail.com"];
+var isAdminEmail = (email) => !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());
+function effectivePlan(plan, expiresAt2, now = Date.now()) {
+  if (plan === "free" || !expiresAt2) return plan;
+  return Date.parse(expiresAt2) > now ? plan : "free";
+}
+function extendExpiry(current, plan, period, now = /* @__PURE__ */ new Date()) {
+  const active = current.plan === plan && current.expiresAt && Date.parse(current.expiresAt) > now.getTime();
+  const start = active ? new Date(current.expiresAt) : new Date(now);
+  start.setMonth(start.getMonth() + (period === "yearly" ? 12 : 1));
+  return start.toISOString();
 }
 
 // server/db/index.ts
@@ -29295,7 +29330,8 @@ function supabaseTokenVerifier(url2, serviceRoleKey) {
 }
 var PAID = ["starter", "business", "agency"];
 function toPublicUser(u) {
-  return { id: u.id, name: u.name, email: u.email, plan: u.plan, createdAt: u.createdAt };
+  const plan = effectivePlan(u.plan, u.planExpiresAt);
+  return { id: u.id, name: u.name, email: u.email, plan, planExpiresAt: plan === "free" ? null : u.planExpiresAt ?? null, createdAt: u.createdAt };
 }
 async function accountFor(identity) {
   const found = await db().users.findByAuthId(identity.id);
@@ -29364,7 +29400,7 @@ var QA_ID = /^[\w-]{1,40}$/;
 var MAX_UPLOAD = 5 * 1024 * 1024;
 function planError(plan, what, ok2) {
   const next2 = nextPlanWhere(plan, ok2);
-  const hint = next2 ? ` Upgrade to ${PLAN_NAMES[next2]} to unlock this.` : "";
+  const hint = !next2 ? "" : PAID_PLANS_AVAILABLE ? ` Upgrade to ${PLAN_NAMES[next2]} to unlock this.` : ` It's part of the ${PLAN_NAMES[next2]} plan, coming soon.`;
   return new HttpError(403, `${what}${hint}`);
 }
 function checkPatch(user, patch) {
@@ -29492,7 +29528,7 @@ function createApp({ verifyToken }) {
     const bot = await findBot(c.req.param("id"));
     if (!bot?.published) throw new HttpError(404, "Bot is not published yet.");
     const owner = bot.ownerId ? await db().users.findById(bot.ownerId) : void 0;
-    const limits = limitsFor(owner?.plan);
+    const limits = limitsFor(owner ? effectivePlan(owner.plan, owner.planExpiresAt) : void 0);
     const existing = await db().conversations.get(conversationId);
     if (existing) {
       if (existing.botId !== bot.id || existing.visitorId !== visitorId) throw new HttpError(403, "Not your conversation");
@@ -29550,7 +29586,7 @@ function createApp({ verifyToken }) {
     const bot = await findBot(c.req.param("id"));
     if (!bot) throw new HttpError(404, "Bot not found");
     const owner = bot.ownerId ? await db().users.findById(bot.ownerId) : void 0;
-    const limits = limitsFor(owner?.plan);
+    const limits = limitsFor(owner ? effectivePlan(owner.plan, owner.planExpiresAt) : void 0);
     if (!bot.published?.enableOrders || !limits.orders) throw new HttpError(403, "Orders not enabled for this bot");
     const order2 = {
       id: rid(8),
@@ -29579,7 +29615,7 @@ function createApp({ verifyToken }) {
   const dashLimit = rateLimit({ windowMs: 60 * 1e3, max: 300, message: "Too many requests. Please slow down for a moment." });
   const siteFetchLimit = rateLimit({ windowMs: 10 * 60 * 1e3, max: 30, message: "Too many website checks. Please wait a few minutes." });
   const me = (c) => c.get("user");
-  app2.get("/api/me", dashLimit, signedIn, (c) => c.json({ user: me(c) }));
+  app2.get("/api/me", dashLimit, signedIn, (c) => c.json({ user: { ...me(c), isAdmin: isAdminEmail(me(c).email) } }));
   app2.get("/api/bots", dashLimit, signedIn, async (c) => c.json(await listOwnedBots(me(c).id)));
   app2.post("/api/bots", dashLimit, siteFetchLimit, signedIn, async (c) => {
     const { url: rawUrl, templateId } = await body(c);
@@ -29809,6 +29845,110 @@ function createApp({ verifyToken }) {
     const bot = await findOwnedBot(me(c).id, c.req.param("id"));
     return c.json({ deleted: await db().conversations.deleteTest(bot.id) });
   });
+  const ownPayment = ({ proofPath, userId: _u, ...rest }) => ({ ...rest, hasProof: !!proofPath });
+  const PERIODS = ["monthly", "yearly"];
+  const METHODS2 = ["instapay", "vodafone_cash"];
+  const payLimit = rateLimit({ windowMs: 60 * 60 * 1e3, max: 10, message: "Too many payment submissions. Please try again later." });
+  app2.get("/api/billing", dashLimit, signedIn, async (c) => {
+    const user = me(c);
+    const requests = await db().payments.listByUser(user.id);
+    c.header("Cache-Control", "no-store");
+    return c.json({ plan: user.plan, planExpiresAt: user.planExpiresAt ?? null, requests: requests.map(ownPayment) });
+  });
+  app2.post(
+    "/api/billing/requests",
+    dashLimit,
+    payLimit,
+    signedIn,
+    bodyLimit({ maxSize: MAX_UPLOAD + 64 * 1024, onError: (cc) => cc.json({ error: "The receipt image is larger than 5 MB." }, 413) }),
+    async (c) => {
+      if (!PAID_PLANS_AVAILABLE) throw new HttpError(403, "Paid plans aren't available yet.");
+      const form = await c.req.parseBody();
+      const field = (k) => typeof form[k] === "string" ? form[k].trim() : "";
+      const plan = field("plan");
+      const period = field("period");
+      const method = field("method");
+      const sender = field("sender").slice(0, 100);
+      const reference = field("reference").slice(0, 100);
+      if (!PAID_PLANS.includes(plan)) throw new HttpError(400, "Choose a plan.");
+      if (!PERIODS.includes(period)) throw new HttpError(400, "Choose monthly or yearly.");
+      if (!METHODS2.includes(method)) throw new HttpError(400, "Choose InstaPay or Vodafone Cash.");
+      if (sender.length < 4) throw new HttpError(400, method === "instapay" ? "Enter the InstaPay address or phone number you paid from." : "Enter the Vodafone Cash number you paid from.");
+      if (reference.length < 3) throw new HttpError(400, "Enter the transaction or reference number from your receipt.");
+      const user = me(c);
+      const mine = await db().payments.listByUser(user.id);
+      if (mine.some((p) => p.status === "pending")) throw new HttpError(409, "You already have a payment waiting for review. We'll activate it soon.");
+      let proofPath = null;
+      const file = form["proof"];
+      if (file instanceof File && file.size > 0) {
+        if (file.size > MAX_UPLOAD) throw new HttpError(413, "The receipt image is larger than 5 MB.");
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        proofPath = await db().proofs.save({ buffer: bytes, ...checkImage(bytes) });
+      }
+      const request = {
+        id: `pay_${rid(12)}`,
+        userId: user.id,
+        plan,
+        period,
+        // The amount is always computed here, never taken from the browser.
+        amountEgp: priceFor(plan, period),
+        method,
+        sender,
+        reference,
+        proofPath,
+        status: "pending",
+        note: null,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+        reviewedAt: null
+      };
+      await db().payments.insert(request);
+      log.info("payment submitted", { requestId: c.get("requestId"), paymentId: request.id, plan, period, amountEgp: request.amountEgp, method });
+      return c.json(ownPayment(request), 201);
+    }
+  );
+  const adminOnly = async (c, next2) => {
+    if (!isAdminEmail(c.get("user").email)) return c.json({ error: "Not found" }, 404);
+    await next2();
+  };
+  const STATUSES = ["pending", "approved", "rejected"];
+  app2.get("/api/admin/payments", dashLimit, signedIn, adminOnly, async (c) => {
+    const q = c.req.query("status");
+    const status = STATUSES.includes(q) ? q : "pending";
+    const list = await db().payments.listByStatus(status, 100);
+    const payments = await Promise.all(list.map(async (p) => {
+      const u = await db().users.findById(p.userId);
+      const { proofPath, ...rest } = p;
+      return {
+        ...rest,
+        proofUrl: proofPath ? await db().proofs.signedUrl(proofPath, 600) : null,
+        user: u ? { id: u.id, name: u.name, email: u.email, plan: effectivePlan(u.plan, u.planExpiresAt), planExpiresAt: u.planExpiresAt ?? null } : null
+      };
+    }));
+    c.header("Cache-Control", "no-store");
+    return c.json({ payments });
+  });
+  app2.post("/api/admin/payments/:id/approve", dashLimit, signedIn, adminOnly, async (c) => {
+    const p = await db().payments.get(c.req.param("id"));
+    if (!p) throw new HttpError(404, "Payment not found");
+    if (p.status !== "pending") throw new HttpError(409, `This payment was already ${p.status}.`);
+    const u = await db().users.findById(p.userId);
+    if (!u) throw new HttpError(404, "The customer's account no longer exists.");
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    if (!await db().payments.review(p.id, "approved", null, now)) throw new HttpError(409, "This payment was already reviewed.");
+    const expiresAt2 = extendExpiry({ plan: effectivePlan(u.plan, u.planExpiresAt), expiresAt: u.planExpiresAt }, p.plan, p.period);
+    await db().users.setPlan(u.id, p.plan, expiresAt2);
+    log.info("payment approved", { paymentId: p.id, userId: u.id, plan: p.plan, expiresAt: expiresAt2, by: me(c).id });
+    return c.json({ success: true, plan: p.plan, planExpiresAt: expiresAt2 });
+  });
+  app2.post("/api/admin/payments/:id/reject", dashLimit, signedIn, adminOnly, async (c) => {
+    const b = await body(c);
+    const note = typeof b?.note === "string" ? b.note.trim().slice(0, 300) : "";
+    const p = await db().payments.get(c.req.param("id"));
+    if (!p) throw new HttpError(404, "Payment not found");
+    if (!await db().payments.review(p.id, "rejected", note || null, (/* @__PURE__ */ new Date()).toISOString())) throw new HttpError(409, "This payment was already reviewed.");
+    log.info("payment rejected", { paymentId: p.id, by: me(c).id });
+    return c.json({ success: true });
+  });
   app2.notFound((c) => c.json({ error: "Not found" }, 404));
   return app2;
 }
@@ -29884,11 +30024,28 @@ function userFromRow(r) {
     name: r.name,
     email: r.email,
     plan: r.plan,
+    planExpiresAt: r.plan_expires_at ?? null,
     createdAt: r.created_at,
     ...r.auth_id ? { authId: r.auth_id } : {},
     ...r.requested_plan ? { requestedPlan: r.requested_plan } : {}
   };
 }
+var paymentFromRow = (r) => ({
+  id: r.id,
+  userId: r.user_id,
+  plan: r.plan,
+  period: r.period,
+  amountEgp: r.amount_egp,
+  method: r.method,
+  sender: r.sender,
+  reference: r.reference,
+  proofPath: r.proof_path ?? null,
+  status: r.status,
+  note: r.note ?? null,
+  createdAt: r.created_at,
+  reviewedAt: r.reviewed_at ?? null
+});
+var PROOFS_BUCKET = "payment-proofs";
 function ok(res, what) {
   if (res.error) throw new Error(`Supabase ${what}: ${res.error.message}`);
   return res.data;
@@ -29916,6 +30073,9 @@ function createSupabaseDatabase(url2, serviceRoleKey) {
       findByAuthId: async (authId) => {
         const rows = ok(await sb.from("users").select("*").eq("auth_id", authId).limit(1), "users.findByAuthId");
         return rows?.[0] ? userFromRow(rows[0]) : void 0;
+      },
+      setPlan: async (userId, plan, expiresAt2) => {
+        ok(await sb.from("users").update({ plan, plan_expires_at: expiresAt2 }).eq("id", userId), "users.setPlan");
       },
       linkAuth: async (userId, authId) => {
         ok(await sb.from("users").update({ auth_id: authId }).eq("id", userId).is("auth_id", null), "users.linkAuth");
@@ -30046,6 +30206,53 @@ function createSupabaseDatabase(url2, serviceRoleKey) {
         const up = await sb.storage.from(BUCKET).upload(name, buffer, { contentType: mimetype, upsert: false });
         if (up.error) throw new Error(`Supabase storage upload: ${up.error.message}`);
         return sb.storage.from(BUCKET).getPublicUrl(name).data.publicUrl;
+      }
+    },
+    payments: {
+      insert: async (p) => {
+        ok(await sb.from("payment_requests").insert({
+          id: p.id,
+          user_id: p.userId,
+          plan: p.plan,
+          period: p.period,
+          amount_egp: p.amountEgp,
+          method: p.method,
+          sender: p.sender,
+          reference: p.reference,
+          proof_path: p.proofPath,
+          status: p.status,
+          note: p.note,
+          created_at: p.createdAt
+        }), "payments.insert");
+      },
+      get: async (id) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("id", id).limit(1), "payments.get");
+        return rows?.[0] ? paymentFromRow(rows[0]) : void 0;
+      },
+      listByUser: async (userId) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(50), "payments.listByUser");
+        return (rows ?? []).map(paymentFromRow);
+      },
+      listByStatus: async (status, limit) => {
+        const rows = ok(await sb.from("payment_requests").select("*").eq("status", status).order("created_at", { ascending: status === "pending" }).limit(limit), "payments.listByStatus");
+        return (rows ?? []).map(paymentFromRow);
+      },
+      review: async (id, status, note, at) => {
+        const rows = ok(await sb.from("payment_requests").update({ status, note, reviewed_at: at }).eq("id", id).eq("status", "pending").select("id"), "payments.review");
+        return (rows?.length ?? 0) > 0;
+      }
+    },
+    proofs: {
+      save: async ({ buffer, originalName, mimetype }) => {
+        const ext = (originalName.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
+        const name = `${(/* @__PURE__ */ new Date()).toISOString().slice(0, 7)}/${Date.now()}_${rid(10)}${ext}`;
+        const up = await sb.storage.from(PROOFS_BUCKET).upload(name, buffer, { contentType: mimetype, upsert: false });
+        if (up.error) throw new Error(`Supabase storage upload (proofs): ${up.error.message}`);
+        return name;
+      },
+      signedUrl: async (path, seconds) => {
+        const { data: data2, error } = await sb.storage.from(PROOFS_BUCKET).createSignedUrl(path, seconds);
+        return error ? null : data2.signedUrl;
       }
     },
     unansweredLog: {

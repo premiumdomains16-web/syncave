@@ -7,7 +7,7 @@ import type { Plan } from '@shared/types';
 import { limitsFor, nextPlanWhere, PAID_PLANS_AVAILABLE, PLAN_NAMES, type PlanLimits } from '@shared/plans';
 import { useAuth } from '@/auth';
 
-export const PRICING_URL = '/#pricing';
+export const PRICING_URL = '/app#/billing';
 
 export function usePlan(): { plan: Plan; limits: PlanLimits; name: string } {
   const { user } = useAuth();
@@ -17,7 +17,7 @@ export function usePlan(): { plan: Plan; limits: PlanLimits; name: string } {
 
 export function UpgradeLink({ children = 'See plans', className = '' }: { children?: ReactNode; className?: string }) {
   return (
-    <a href={PRICING_URL} target="_blank" rel="noopener" className={`inline-flex items-center gap-1 font-semibold text-brand-600 hover:text-brand-700 whitespace-nowrap ${className}`}>
+    <a href={PRICING_URL} className={`inline-flex items-center gap-1 font-semibold text-brand-600 hover:text-brand-700 whitespace-nowrap ${className}`}>
       {children} <ArrowUpRight className="w-3.5 h-3.5" />
     </a>
   );
