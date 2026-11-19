@@ -29949,6 +29949,77 @@ function createApp({ verifyToken }) {
     log.info("payment rejected", { paymentId: p.id, by: me(c).id });
     return c.json({ success: true });
   });
+  const ALL_PLANS = ["free", "starter", "business", "agency"];
+  app2.get("/api/admin/users", dashLimit, signedIn, adminOnly, async (c) => {
+    const search = (c.req.query("q") ?? "").slice(0, 100);
+    const [users, sites, pending] = await Promise.all([
+      db().users.list({ search, limit: 200 }),
+      db().bots.countByOwner(),
+      db().payments.listByStatus("pending", 500)
+    ]);
+    const waiting = new Set(pending.map((p) => p.userId));
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      users: users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        createdAt: u.createdAt,
+        plan: effectivePlan(u.plan, u.planExpiresAt),
+        /** The stored plan, which differs from `plan` when a paid period has ended. */
+        storedPlan: u.plan,
+        planExpiresAt: u.planExpiresAt ?? null,
+        sites: sites[u.id] ?? 0,
+        hasPendingPayment: waiting.has(u.id),
+        /** Has signed in with Supabase Auth at least once. */
+        linked: !!u.authId
+      }))
+    });
+  });
+  app2.post("/api/admin/users/:id/plan", dashLimit, signedIn, adminOnly, async (c) => {
+    const { plan, months } = await body(c);
+    if (!ALL_PLANS.includes(plan)) throw new HttpError(400, "Choose a plan.");
+    if (months !== null && months !== void 0 && !(Number.isInteger(months) && months >= 1 && months <= 36)) {
+      throw new HttpError(400, "Duration must be 1 to 36 months, or no end date.");
+    }
+    const u = await db().users.findById(c.req.param("id"));
+    if (!u) throw new HttpError(404, "User not found");
+    let expiresAt2 = null;
+    if (plan !== "free" && months) {
+      const active = effectivePlan(u.plan, u.planExpiresAt) === plan && u.planExpiresAt && Date.parse(u.planExpiresAt) > Date.now();
+      const d = active ? new Date(u.planExpiresAt) : /* @__PURE__ */ new Date();
+      d.setMonth(d.getMonth() + months);
+      expiresAt2 = d.toISOString();
+    }
+    await db().users.setPlan(u.id, plan, expiresAt2);
+    log.info("plan set by admin", { userId: u.id, plan, expiresAt: expiresAt2, by: me(c).id });
+    return c.json({ success: true, plan, planExpiresAt: expiresAt2 });
+  });
+  app2.get("/api/admin/stats", dashLimit, signedIn, adminOnly, async (c) => {
+    const [users, pending, approved] = await Promise.all([
+      db().users.list({ limit: 5e3 }),
+      db().payments.listByStatus("pending", 500),
+      db().payments.listByStatus("approved", 5e3)
+    ]);
+    const now = Date.now();
+    const week = now + 7 * 864e5;
+    const monthStart = /* @__PURE__ */ new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const paying = users.filter((u) => effectivePlan(u.plan, u.planExpiresAt) !== "free");
+    const expiringSoon = paying.filter((u) => u.planExpiresAt && Date.parse(u.planExpiresAt) <= week).length;
+    const sum = (xs) => xs.reduce((n, p) => n + p.amountEgp, 0);
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      users: users.length,
+      newUsers30d: users.filter((u) => Date.parse(u.createdAt) > now - 30 * 864e5).length,
+      paying: paying.length,
+      expiringSoon,
+      pendingPayments: pending.length,
+      revenueThisMonth: sum(approved.filter((p) => p.reviewedAt && Date.parse(p.reviewedAt) >= monthStart.getTime())),
+      revenueTotal: sum(approved)
+    });
+  });
   app2.notFound((c) => c.json({ error: "Not found" }, 404));
   return app2;
 }
@@ -30074,6 +30145,12 @@ function createSupabaseDatabase(url2, serviceRoleKey) {
         const rows = ok(await sb.from("users").select("*").eq("auth_id", authId).limit(1), "users.findByAuthId");
         return rows?.[0] ? userFromRow(rows[0]) : void 0;
       },
+      list: async ({ search, limit }) => {
+        let q = sb.from("users").select("*").order("created_at", { ascending: false }).limit(limit);
+        const s = search?.trim().replace(/[%_,()]/g, "");
+        if (s) q = q.or(`email.ilike.%${s}%,name.ilike.%${s}%`);
+        return (ok(await q, "users.list") ?? []).map(userFromRow);
+      },
       setPlan: async (userId, plan, expiresAt2) => {
         ok(await sb.from("users").update({ plan, plan_expires_at: expiresAt2 }).eq("id", userId), "users.setPlan");
       },
@@ -30116,6 +30193,12 @@ function createSupabaseDatabase(url2, serviceRoleKey) {
         ok(await sb.from("bots").delete().eq("id", id), "bots.delete");
       },
       // orders/unanswered cascade in SQL
+      countByOwner: async () => {
+        const rows = ok(await sb.from("bots").select("owner_id").not("owner_id", "is", null).limit(1e4), "bots.countByOwner");
+        const out = {};
+        for (const r of rows ?? []) out[r.owner_id] = (out[r.owner_id] ?? 0) + 1;
+        return out;
+      },
       claimUnowned: async (ownerId) => {
         const rows = ok(await sb.from("bots").update({ owner_id: ownerId }).is("owner_id", null).select("id"), "bots.claim");
         return rows?.length ?? 0;

@@ -681,6 +681,79 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
     return c.json({ success: true });
   });
 
+  // ---- Admin: users and plans ----
+  const ALL_PLANS: Plan[] = ["free", "starter", "business", "agency"];
+
+  app.get("/api/admin/users", dashLimit, signedIn, adminOnly, async (c) => {
+    const search = (c.req.query("q") ?? "").slice(0, 100);
+    const [users, sites, pending] = await Promise.all([
+      db().users.list({ search, limit: 200 }),
+      db().bots.countByOwner(),
+      db().payments.listByStatus("pending", 500),
+    ]);
+    const waiting = new Set(pending.map((p) => p.userId));
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      users: users.map((u) => ({
+        id: u.id, name: u.name, email: u.email, createdAt: u.createdAt,
+        plan: effectivePlan(u.plan, u.planExpiresAt),
+        /** The stored plan, which differs from `plan` when a paid period has ended. */
+        storedPlan: u.plan,
+        planExpiresAt: u.planExpiresAt ?? null,
+        sites: sites[u.id] ?? 0,
+        hasPendingPayment: waiting.has(u.id),
+        /** Has signed in with Supabase Auth at least once. */
+        linked: !!u.authId,
+      })),
+    });
+  });
+
+  // Turn a plan on by hand (e.g. paid outside the form), extend it, or move back to Free.
+  app.post("/api/admin/users/:id/plan", dashLimit, signedIn, adminOnly, async (c) => {
+    const { plan, months } = await body(c);
+    if (!ALL_PLANS.includes(plan)) throw new HttpError(400, "Choose a plan.");
+    if (months !== null && months !== undefined && !(Number.isInteger(months) && months >= 1 && months <= 36)) {
+      throw new HttpError(400, "Duration must be 1 to 36 months, or no end date.");
+    }
+    const u = await db().users.findById(c.req.param("id"));
+    if (!u) throw new HttpError(404, "User not found");
+    let expiresAt: string | null = null;
+    if (plan !== "free" && months) {
+      // Same plan still active: add the months on top; otherwise start today.
+      const active = effectivePlan(u.plan, u.planExpiresAt) === plan && u.planExpiresAt && Date.parse(u.planExpiresAt) > Date.now();
+      const d = active ? new Date(u.planExpiresAt!) : new Date();
+      d.setMonth(d.getMonth() + months);
+      expiresAt = d.toISOString();
+    }
+    await db().users.setPlan(u.id, plan, expiresAt);
+    log.info("plan set by admin", { userId: u.id, plan, expiresAt, by: me(c).id });
+    return c.json({ success: true, plan, planExpiresAt: expiresAt });
+  });
+
+  app.get("/api/admin/stats", dashLimit, signedIn, adminOnly, async (c) => {
+    const [users, pending, approved] = await Promise.all([
+      db().users.list({ limit: 5000 }),
+      db().payments.listByStatus("pending", 500),
+      db().payments.listByStatus("approved", 5000),
+    ]);
+    const now = Date.now();
+    const week = now + 7 * 86400000;
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const paying = users.filter((u) => effectivePlan(u.plan, u.planExpiresAt) !== "free");
+    const expiringSoon = paying.filter((u) => u.planExpiresAt && Date.parse(u.planExpiresAt) <= week).length;
+    const sum = (xs: PaymentRequest[]) => xs.reduce((n, p) => n + p.amountEgp, 0);
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      users: users.length,
+      newUsers30d: users.filter((u) => Date.parse(u.createdAt) > now - 30 * 86400000).length,
+      paying: paying.length,
+      expiringSoon,
+      pendingPayments: pending.length,
+      revenueThisMonth: sum(approved.filter((p) => p.reviewedAt && Date.parse(p.reviewedAt) >= monthStart.getTime())),
+      revenueTotal: sum(approved),
+    });
+  });
+
   app.notFound((c) => c.json({ error: "Not found" }, 404));
 
   return app;

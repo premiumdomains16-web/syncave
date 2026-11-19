@@ -63,6 +63,9 @@ export const api = {
   submitPayment: (form: FormData) => request<OwnPayment>('/api/billing/requests', { method: 'POST', body: form }),
   adminPayments: (status: PaymentStatus) => request<{ payments: AdminPayment[] }>(`/api/admin/payments?status=${status}`),
   approvePayment: (id: string) => request<{ success: true; plan: string; planExpiresAt: string }>(`/api/admin/payments/${id}/approve`, { method: 'POST' }),
+  adminUsers: (q = '') => request<{ users: AdminUser[] }>(`/api/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminSetPlan: (id: string, plan: Plan, months: number | null) => request<{ success: true; plan: Plan; planExpiresAt: string | null }>(`/api/admin/users/${id}/plan`, json('POST', { plan, months })),
+  adminStats: () => request<AdminStats>('/api/admin/stats'),
   rejectPayment: (id: string, note: string) => request<{ success: true }>(`/api/admin/payments/${id}/reject`, json('POST', { note })),
   /** Downloads all orders as a CSV file (fetched with the sign-in token, then saved). */
   downloadOrdersCsv: async (id: string) => {
@@ -84,6 +87,8 @@ export const api = {
 
 export type VerifyMethod = 'meta' | 'snippet' | 'dns';
 export type OwnPayment = Omit<PaymentRequest, 'proofPath' | 'userId'> & { hasProof: boolean };
+export interface AdminUser { id: string; name: string; email: string; createdAt: string; plan: Plan; storedPlan: Plan; planExpiresAt: string | null; sites: number; hasPendingPayment: boolean; linked: boolean }
+export interface AdminStats { users: number; newUsers30d: number; paying: number; expiringSoon: number; pendingPayments: number; revenueThisMonth: number; revenueTotal: number }
 export interface BillingInfo { plan: Plan; planExpiresAt: string | null; requests: OwnPayment[] }
 export type AdminPayment = Omit<PaymentRequest, 'proofPath'> & { proofUrl: string | null; user: { id: string; name: string; email: string; plan: Plan; planExpiresAt: string | null } | null };
 export interface InstallStatus { installed: boolean; scripts: { src: string; host: string; botId: string | null }[]; checkedUrl: string }

@@ -132,6 +132,12 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
         const rows = ok(await sb.from("users").select("*").eq("auth_id", authId).limit(1), "users.findByAuthId");
         return rows?.[0] ? userFromRow(rows[0]) : undefined;
       },
+      list: async ({ search, limit }) => {
+        let q = sb.from("users").select("*").order("created_at", { ascending: false }).limit(limit);
+        const s = search?.trim().replace(/[%_,()]/g, "");
+        if (s) q = q.or(`email.ilike.%${s}%,name.ilike.%${s}%`);
+        return (ok(await q, "users.list") ?? []).map(userFromRow);
+      },
       setPlan: async (userId, plan, expiresAt) => {
         ok(await sb.from("users").update({ plan, plan_expires_at: expiresAt }).eq("id", userId), "users.setPlan");
       },
@@ -162,6 +168,12 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
       insert: async (bot) => { ok(await sb.from("bots").insert(botToRow(bot)), "bots.insert"); },
       save: async (bot) => { ok(await sb.from("bots").upsert(botToRow(bot), { onConflict: "id" }), "bots.save"); },
       delete: async (id) => { ok(await sb.from("bots").delete().eq("id", id), "bots.delete"); }, // orders/unanswered cascade in SQL
+      countByOwner: async () => {
+        const rows = ok(await sb.from("bots").select("owner_id").not("owner_id", "is", null).limit(10000), "bots.countByOwner");
+        const out: Record<string, number> = {};
+        for (const r of rows ?? []) out[r.owner_id] = (out[r.owner_id] ?? 0) + 1;
+        return out;
+      },
       claimUnowned: async (ownerId) => {
         const rows = ok(await sb.from("bots").update({ owner_id: ownerId }).is("owner_id", null).select("id"), "bots.claim");
         return rows?.length ?? 0;

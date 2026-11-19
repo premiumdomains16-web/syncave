@@ -84,7 +84,7 @@ export default function App() {
           <BillingPage initialPlan={route.plan} />
         ) : route.view === 'admin' ? (
           isAdmin
-            ? <AdminPage onPendingCount={setPendingPayments} />
+            ? <AdminPage onPendingCount={setPendingPayments} pendingCount={pendingPayments} />
             : <div className="flex-1 flex items-center justify-center"><EmptyState icon={<SearchX className="w-6 h-6" />} title="Page not found" /></div>
         ) : activeBot ? (
           <SiteView

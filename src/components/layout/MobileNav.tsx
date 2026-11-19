@@ -12,7 +12,7 @@ export function MobileNav({ bots, route, onNavigate, onAddSite, isAdmin, pending
 }) {
   const [open, setOpen] = useState(false);
   const current = route.view === 'site' ? bots.find((b) => b.id === route.botId)?.name ?? 'Site'
-    : route.view === 'docs' ? 'Docs' : route.view === 'help' ? 'Help' : route.view === 'billing' ? 'Billing' : route.view === 'admin' ? 'Payments' : 'Overview';
+    : route.view === 'docs' ? 'Docs' : route.view === 'help' ? 'Help' : route.view === 'billing' ? 'Billing' : route.view === 'admin' ? 'Admin' : 'Overview';
 
   // Close on Escape, lock page scroll while open, and close if the screen grows to desktop size.
   useEffect(() => {

@@ -197,6 +197,26 @@ check("simulator refuses localhost", r.status === 400, String(r.status));
   check("reject with note", r.status === 200);
   r = await call("GET", "/api/billing", { token: alice });
   check("customer sees rejection reason", r.data.requests[0].status === "rejected" && r.data.requests[0].note === "Amount not received");
+  // Admin dashboard: users, manual plans, stats.
+  r = await call("GET", "/api/admin/users?q=alice", { token: admin });
+  const row = r.data.users?.[0];
+  check("admin user list with search", r.status === 200 && r.data.users.length === 1 && row.email === "alice@example.com" && row.plan === "starter" && typeof row.sites === "number", JSON.stringify(row));
+  r = await call("GET", "/api/admin/users", { token: alice });
+  check("non-admin can't list users", r.status === 404);
+  r = await call("POST", `/api/admin/users/${row.id}/plan`, { token: admin, json: { plan: "starter", months: 2 } });
+  const extended = (Date.parse(r.data.planExpiresAt) - Date.parse(row.planExpiresAt)) / 86400000;
+  check("manual extend adds on top of active plan", r.status === 200 && extended > 58 && extended < 63, `${extended.toFixed(1)}d`);
+  r = await call("POST", `/api/admin/users/${row.id}/plan`, { token: admin, json: { plan: "business", months: null } });
+  check("manual plan with no end date", r.status === 200 && r.data.planExpiresAt === null);
+  r = await call("POST", `/api/admin/users/${row.id}/plan`, { token: admin, json: { plan: "gold", months: 1 } });
+  check("invalid plan rejected", r.status === 400);
+  r = await call("POST", `/api/admin/users/${row.id}/plan`, { token: admin, json: { plan: "starter", months: 99 } });
+  check("invalid duration rejected", r.status === 400);
+  r = await call("GET", "/api/admin/stats", { token: admin });
+  check("stats", r.status === 200 && r.data.users >= 2 && r.data.paying >= 1 && r.data.revenueTotal === 150 && r.data.pendingPayments === 0, JSON.stringify(r.data));
+  r = await call("POST", `/api/admin/users/${row.id}/plan`, { token: admin, json: { plan: "free" } });
+  check("move back to free", r.status === 200 && r.data.plan === "free" && r.data.planExpiresAt === null);
+
   // An expired plan counts as Free.
   await db().users.setPlan(acct!.id, "starter", new Date(Date.now() - 1000).toISOString());
   const { toPublicUser } = await import("../server/auth.js");

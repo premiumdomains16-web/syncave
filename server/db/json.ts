@@ -92,6 +92,13 @@ export function createJsonDatabase(): Database {
         all.push(user);
       }),
       linkAuth: (userId, authId) => users.mutate((all) => { const u = all.find((x) => x.id === userId); if (u && !u.authId) u.authId = authId; }),
+      list: async ({ search, limit }) => {
+        const s = search?.trim().toLowerCase();
+        return (await users.read())
+          .filter((u) => !s || u.email.toLowerCase().includes(s) || u.name.toLowerCase().includes(s))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, limit);
+      },
       setPlan: (userId, plan, expiresAt) => users.mutate((all) => { const u = all.find((x) => x.id === userId); if (u) { u.plan = plan; u.planExpiresAt = expiresAt; } }),
     },
     bots: {
@@ -121,6 +128,11 @@ export function createJsonDatabase(): Database {
         const convIds = new Set((await conversations.read()).filter((c) => c.botId === id).map((c) => c.id));
         await conversations.mutate((all) => { for (let i = all.length - 1; i >= 0; i--) if (all[i].botId === id) all.splice(i, 1); });
         await messages.mutate((all) => { for (let i = all.length - 1; i >= 0; i--) if (convIds.has(all[i].conversationId)) all.splice(i, 1); });
+      },
+      countByOwner: async () => {
+        const out: Record<string, number> = {};
+        for (const b of await bots.read()) if (b.ownerId) out[b.ownerId] = (out[b.ownerId] ?? 0) + 1;
+        return out;
       },
       claimUnowned: (ownerId) => bots.mutate((all) => {
         let n = 0;

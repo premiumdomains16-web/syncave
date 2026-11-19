@@ -51,6 +51,8 @@ export interface Database {
     linkAuth(userId: string, authId: string): Promise<void>;
     /** Sets the plan and when it ends (null = no end date). */
     setPlan(userId: string, plan: Plan, expiresAt: string | null): Promise<void>;
+    /** Admin list: newest first; `search` matches email or name (case-insensitive). */
+    list(opts: { search?: string; limit: number }): Promise<UserRecord[]>;
   };
   payments: {
     insert(p: PaymentRequest): Promise<void>;
@@ -78,6 +80,8 @@ export interface Database {
     delete(id: string): Promise<void>;
     /** Gives every owner-less (pre-accounts) bot to `ownerId`. Returns how many were claimed. */
     claimUnowned(ownerId: string): Promise<number>;
+    /** Number of sites per owner id (admin). */
+    countByOwner(): Promise<Record<string, number>>;
   };
   orders: {
     /** Newest first. */

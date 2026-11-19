@@ -52,7 +52,7 @@ export function Sidebar({ bots, route, onNavigate: navigate, onAddSite: addSite,
             <NavItem icon={<BookOpen className="w-4 h-4" />} label="Docs" active={route.view === 'docs'} onClick={() => onNavigate({ view: 'docs' })} roomy={drawer} />
             <NavItem icon={<LifeBuoy className="w-4 h-4" />} label="Help" active={route.view === 'help'} onClick={() => onNavigate({ view: 'help' })} roomy={drawer} />
             <NavItem icon={<CreditCard className="w-4 h-4" />} label="Billing" active={route.view === 'billing'} onClick={() => onNavigate({ view: 'billing' })} roomy={drawer} />
-            {isAdmin && <NavItem icon={<ShieldCheck className="w-4 h-4" />} label="Payments" badge={pendingPayments} active={route.view === 'admin'} onClick={() => onNavigate({ view: 'admin' })} roomy={drawer} />}
+            {isAdmin && <NavItem icon={<ShieldCheck className="w-4 h-4" />} label="Admin" badge={pendingPayments} active={route.view === 'admin'} onClick={() => onNavigate({ view: 'admin' })} roomy={drawer} />}
           </ul>
 
           <div className="px-3 mb-2 flex items-center justify-between">
