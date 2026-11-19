@@ -172,7 +172,7 @@ export function PreviewPanel({ bot, dirty, onClose, onOpenInbox }: { bot: Bot; d
                 onTeam={startTeamMessage}
                 theme={bot.themeColor}
                 labels={L}
-                onOrder={bot.enableOrders ? () => reply(L.order, '_In the live widget, an order form opens here (name, email, phone, message). Submissions appear in the **Orders** tab._', undefined, false) : undefined}
+                onOrder={bot.enableOrders ? () => reply(L.order, '_In the live widget, an order form opens here (name, phone / WhatsApp, address, order details, optional email). Orders appear in the **Orders** tab._', undefined, false) : undefined}
               />
             )}
           </div>

@@ -144,7 +144,7 @@ export function createJsonDatabase(): Database {
       list: async (botId, { limit, offset }) => {
         await migrateLegacy();
         const mine = (await orders.read()).filter((o) => o.botId === botId).reverse();
-        return { total: mine.length, orders: mine.slice(offset, offset + limit).map(({ botId: _b, ...o }) => o) };
+        return { total: mine.length, orders: mine.slice(offset, offset + limit).map(({ botId: _b, ...o }) => ({ ...o, address: o.address ?? "" })) };
       },
       insert: (botId, order, keep) => orders.mutate((all) => {
         all.push({ botId, ...order });

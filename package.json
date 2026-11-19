@@ -23,6 +23,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "cheerio": "^1.2.0",
+    "fflate": "^0.8.3",
     "firebase": "^12.19.0",
     "hono": "^4.13.18",
     "lucide-react": "^0.546.0",

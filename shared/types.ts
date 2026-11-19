@@ -52,8 +52,12 @@ export interface ChatMessage {
 export interface Order {
   id: string;
   name: string;
+  /** Optional (phone is the main contact); empty string when not given. */
   email: string;
   phone: string;
+  /** Delivery address; empty when not given. */
+  address: string;
+  /** What they want to order. */
   message: string;
   timestamp: string;
 }

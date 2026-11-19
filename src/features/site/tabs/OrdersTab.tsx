@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, Download, Mail, RefreshCw } from 'lucide-react';
+import { ChevronDown, Download, Mail, MapPin, MessageCircle, Phone, RefreshCw } from 'lucide-react';
 import type { Bot, Order } from '@shared/types';
 import { api } from '@/lib/api';
 import { isNativeApp } from '@/lib/native';
@@ -12,7 +12,23 @@ import { PlanNotice, UpgradeLink, UsageMeter, usePlan } from '@/components/PlanL
 const PAGE = 50;
 
 /** Orders are fetched per page from the server; the bot only carries the count. */
+/** wa.me needs the international number without + or leading zeros; Egyptian 01xxxxxxxxx → 201xxxxxxxxx. */
+function whatsappNumber(phone: string): string | null {
+  let d = phone.replace(/\D/g, '');
+  if (!d) return null;
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (/^01\d{9}$/.test(d)) d = '2' + d;
+  return d.length >= 10 && d.length <= 15 ? d : null;
+}
+
 export function OrdersTab({ bot, onCount }: { bot: Bot; onCount: (n: number) => void }) {
+  const [exporting, setExporting] = useState(false);
+  const exportExcel = async () => {
+    setExporting(true);
+    try { await api.downloadOrdersExcel(bot.id); }
+    catch (e) { notify('err', (e as Error).message); }
+    finally { setExporting(false); }
+  };
   const notify = useToast();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [total, setTotal] = useState(bot.orderCount);
@@ -53,8 +69,8 @@ export function OrdersTab({ bot, onCount }: { bot: Bot; onCount: (n: number) => 
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="secondary" icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />} onClick={refresh} disabled={loading}>Refresh</Button>
             {total > 0 && !isNativeApp && (
-              <Button icon={<Download className="w-4 h-4" />} onClick={() => api.downloadOrdersCsv(bot.id).catch((e) => notify('err', (e as Error).message))}>
-                Export CSV
+              <Button icon={<Download className="w-4 h-4" />} loading={exporting} onClick={exportExcel}>
+                Export to Excel
               </Button>
             )}
           </div>
@@ -72,7 +88,7 @@ export function OrdersTab({ bot, onCount }: { bot: Bot; onCount: (n: number) => 
           <div className="flex-1 min-w-[12rem]"><UsageMeter used={total} limit={kept} label={`Orders stored (${planName} plan)`} /></div>
           <p className="text-xs text-slate-600 max-w-sm">
             {nearCap ? 'You’re close to the cap — once it’s reached, the oldest orders are removed as new ones arrive. ' : 'When the cap is reached, the oldest orders are removed as new ones arrive. '}
-            Export to CSV to keep a copy, or <UpgradeLink className="text-xs">upgrade for more</UpgradeLink>.
+            Export to Excel to keep a copy, or <UpgradeLink className="text-xs">upgrade for more</UpgradeLink>.
           </p>
         </div>
       )}
@@ -85,52 +101,60 @@ export function OrdersTab({ bot, onCount }: { bot: Bot; onCount: (n: number) => 
 
       {orders === null ? (
         <RowsSkeleton rows={4} />
-      ) : (
+      ) : orders.length === 0 ? (
         <Card className="!p-0 overflow-hidden">
-          {orders.length === 0 ? (
-            <EmptyState icon={<Mail className="w-6 h-6" />} title="No orders yet" desc="Orders submitted by visitors will appear here." />
-          ) : (
-            <>
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-left">
-                    <th className="px-4 py-2.5">Customer</th>
-                    <th className="px-4 py-2.5 hidden md:table-cell">Phone</th>
-                    <th className="px-4 py-2.5 hidden lg:table-cell">Message</th>
-                    <th className="px-4 py-2.5 text-right">Received</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-50 align-top cursor-pointer" onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900" dir="auto">{o.name}</div>
-                        <a href={`mailto:${o.email}`} onClick={(e) => e.stopPropagation()} className="text-xs text-brand-600 hover:underline">{o.email}</a>
-                        {expanded === o.id && o.message && <p className="mt-2 text-xs text-slate-600 whitespace-pre-wrap lg:hidden" dir="auto">{o.message}</p>}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-slate-600 text-xs">
-                        {o.phone ? <a href={`tel:${o.phone}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{o.phone}</a> : '—'}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell text-slate-600 text-xs max-w-sm">
-                        <p className={expanded === o.id ? 'whitespace-pre-wrap' : 'truncate'} dir="auto">{o.message || '—'}</p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs text-right whitespace-nowrap" title={formatDateTime(o.timestamp)}>{timeAgo(o.timestamp)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {orders.length < total && (
-                <div className="border-t border-slate-100 p-2 text-center">
-                  <Button variant="ghost" size="sm" icon={<ChevronDown className="w-3.5 h-3.5" />} loading={more} onClick={loadMore}>
-                    Show more ({total - orders.length} left)
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+          <EmptyState icon={<Mail className="w-6 h-6" />} title="No orders yet" desc="Orders submitted by visitors will appear here." />
         </Card>
+      ) : (
+        <div className="space-y-3">
+          {orders.map((o) => {
+            const wa = whatsappNumber(o.phone);
+            return (
+              <Card key={o.id}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-base font-semibold text-slate-900" dir="auto">{o.name}</div>
+                    <div className="text-xs text-slate-500" title={formatDateTime(o.timestamp)}>{timeAgo(o.timestamp)} · {formatDateTime(o.timestamp)}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {o.phone && (
+                      <a href={`tel:${o.phone.replace(/[^\d+]/g, '')}`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        <Phone className="w-3.5 h-3.5" /> <span dir="ltr">{o.phone}</span>
+                      </a>
+                    )}
+                    {wa && (
+                      <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-95">
+                        <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                      </a>
+                    )}
+                    {o.email && (
+                      <a href={`mailto:${o.email}`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        <Mail className="w-3.5 h-3.5" /> Email
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {o.address && (
+                  <div className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                    <MapPin className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" /><span dir="auto">{o.address}</span>
+                  </div>
+                )}
+                {o.message && (
+                  <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 whitespace-pre-wrap" dir="auto">{o.message}</div>
+                )}
+              </Card>
+            );
+          })}
+          {orders.length < total && (
+            <div className="text-center">
+              <Button variant="ghost" size="sm" icon={<ChevronDown className="w-3.5 h-3.5" />} loading={more} onClick={loadMore}>
+                Show more ({total - orders.length} left)
+              </Button>
+            </div>
+          )}
+        </div>
       )}
-      {total > 0 && <p className="text-xs text-slate-400">{total} order{total === 1 ? '' : 's'} · click a row to read the full message.</p>}
+      {total > 0 && <p className="text-xs text-slate-400">{total} order{total === 1 ? '' : 's'}{isNativeApp ? ' · export to Excel from the website' : ''}</p>}
     </div>
   );
 }

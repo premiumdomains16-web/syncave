@@ -24,6 +24,7 @@ import { installStatus, verifyOwnership } from "./verify.js";
 import { BlockedAddress } from "./safeFetch.js";
 import { HttpError } from "./errors.js";
 import { checkImage } from "./security.js";
+import { buildXlsx } from "./xlsx.js";
 import { rateLimit } from "./rateLimit.js";
 import { requireUser, type AuthVars, type VerifyToken } from "./auth.js";
 import { errFields, log } from "./log.js";
@@ -94,7 +95,6 @@ function sanitizePatch(body: any): BotPatch {
   return out;
 }
 
-const csvCell = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
 
 /** JSON body or 400 (never a 500 for a malformed request). */
 async function body(c: Context): Promise<any> {
@@ -266,12 +266,16 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
   });
 
   app.post("/api/bots/:id/orders", rateLimit({ windowMs: 10 * 60 * 1000, max: 30, message: "Too many orders from this address. Please try again later." }), async (c) => {
-    const { name, email, phone, message } = await body(c);
+    const { name, email, phone, message, address } = await body(c);
     const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-    if (!str(name) || !str(email)) throw new HttpError(400, "Name and email required");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(email)) || str(email).length > 254) throw new HttpError(400, "Please enter a valid email address.");
-    if (phone != null && typeof phone !== "string") throw new HttpError(400, "Invalid phone number");
-    if (message != null && typeof message !== "string") throw new HttpError(400, "Invalid message");
+    for (const v of [email, phone, message, address]) if (v != null && typeof v !== "string") throw new HttpError(400, "Invalid order");
+    if (!str(name)) throw new HttpError(400, "Please enter your name.");
+    // Phone (or WhatsApp) is the main contact; email is optional. Older widgets sent
+    // email-only orders, so either one is enough.
+    const digits = str(phone).replace(/\D/g, "");
+    if (str(phone) && (digits.length < 8 || digits.length > 15)) throw new HttpError(400, "Please enter a valid phone number.");
+    if (str(email) && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(email)) || str(email).length > 254)) throw new HttpError(400, "Please enter a valid email address.");
+    if (!str(phone) && !str(email)) throw new HttpError(400, "Please enter a phone number so the store can reach you.");
     const bot = await findBot(c.req.param("id"));
     if (!bot) throw new HttpError(404, "Bot not found");
     // Storage follows the owner's plan: whether orders are collected at all, and how many are kept.
@@ -284,7 +288,8 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
       name: str(name).substring(0, 100),
       email: str(email).substring(0, 254),
       phone: str(phone).substring(0, 20),
-      message: str(message).substring(0, 500),
+      address: str(address).substring(0, 300),
+      message: str(message).substring(0, 1000),
       timestamp: new Date().toISOString(),
     };
     await db().orders.insert(bot.id, order, limits.ordersKept);
@@ -449,7 +454,8 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
     return c.json(await db().orders.list(bot.id, { limit, offset }));
   });
 
-  app.get("/api/bots/:id/orders/export/csv", dashLimit, signedIn, async (c) => {
+  // All of a site's orders as an Excel file (.xlsx), newest first, times in Cairo.
+  app.get("/api/bots/:id/orders/export/xlsx", dashLimit, signedIn, async (c) => {
     const bot = await findOwnedBot(me(c).id, c.req.param("id"));
     const all: Order[] = [];
     for (let offset = 0; ; offset += 500) {
@@ -457,12 +463,27 @@ export function createApp({ verifyToken }: { verifyToken: VerifyToken }) {
       all.push(...page.orders);
       if (all.length >= page.total || page.orders.length === 0) break;
     }
-    let csv = "ID,Name,Email,Phone,Message,Timestamp\n";
-    for (const o of all) csv += [o.id, o.name, o.email, o.phone, o.message, o.timestamp].map(csvCell).join(",") + "\n";
-    c.header("Content-Type", "text/csv; charset=utf-8");
-    c.header("Content-Disposition", `attachment; filename="orders-${bot.id}-${Date.now()}.csv"`);
-    // BOM so Excel opens non-ASCII names (e.g. Arabic) correctly.
-    return c.body("﻿" + csv);
+    const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+    const arabic = /[؀-ۿ]/.test(bot.welcomeMessage + bot.qa.map((q) => q.question).join(" "));
+    const file = buildXlsx({
+      name: "Orders",
+      rtl: arabic,
+      columns: [
+        { header: "Date (Cairo)", width: 18 },
+        { header: "Name", width: 24 },
+        { header: "Phone", width: 16 },
+        { header: "Email", width: 28 },
+        { header: "Address", width: 36 },
+        { header: "Order details", width: 50 },
+        { header: "Order ID", width: 12 },
+      ],
+      rows: all.map((o) => [when(o.timestamp), o.name, o.phone, o.email, o.address, o.message, o.id]),
+    });
+    const safe = bot.name.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 40) || bot.id;
+    const day = new Date().toISOString().slice(0, 10);
+    c.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    c.header("Content-Disposition", `attachment; filename="orders-${bot.id}-${day}.xlsx"; filename*=UTF-8''${encodeURIComponent(`orders-${safe}-${day}.xlsx`)}`);
+    return c.body(file as unknown as ArrayBuffer);
   });
 
   app.get("/api/bots/:id/unanswered", dashLimit, signedIn, async (c) => {

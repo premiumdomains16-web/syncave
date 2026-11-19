@@ -199,8 +199,8 @@
     const T = AR
       ? {
           placeholder: "اكتب سؤالك...", message: "رسالة", send: "إرسال", close: "إغلاق", openChat: "افتح المحادثة",
-          online: "متصل الآن", poweredBy: "مدعوم من", order: "اطلب الآن", name: "الاسم", email: "البريد الإلكتروني",
-          phone: "رقم الموبايل (اختياري)", details: "تفاصيل الطلب", submit: "إرسال الطلب", submitting: "جارٍ الإرسال...",
+          online: "متصل الآن", poweredBy: "مدعوم من", order: "اطلب الآن", name: "الاسم", email: "البريد الإلكتروني (اختياري)",
+          phone: "رقم الموبايل / واتساب", address: "العنوان (للتوصيل)", orderTitle: "اطلب الآن", needName: "من فضلك اكتب اسمك.", needPhone: "من فضلك اكتب رقم موبايل صحيح.", badEmail: "البريد الإلكتروني مش صحيح.", details: "عايز تطلب إيه؟ (المنتج، العدد، المقاس...)", submit: "إرسال الطلب", submitting: "جارٍ الإرسال...",
           thanks: "شكراً لطلبك! هنتواصل معاك قريب.", failed: "للأسف ماقدرناش نبعت الطلب. حاول تاني.",
           fallback: "معنديش إجابة على السؤال ده لسه.", welcome: "أهلاً! إزاي أقدر أساعدك؟", am: "ص", pm: "م", team: "رد من فريق الموقع",
           previewOrder: "(معاينة) على موقعك الحقيقي، الطلب ده هيوصلك في لوحة التحكم.",
@@ -211,8 +211,8 @@
         }
       : {
           placeholder: "Type a question...", message: "Message", send: "Send", close: "Close", openChat: "Open chat",
-          online: "Online", poweredBy: "Powered by", order: "Place an order", name: "Your name", email: "Your email",
-          phone: "Phone (optional)", details: "Order details", submit: "Submit order", submitting: "Submitting...",
+          online: "Online", poweredBy: "Powered by", order: "Place an order", name: "Your name", email: "Email (optional)",
+          phone: "Phone / WhatsApp", address: "Delivery address", orderTitle: "Place an order", needName: "Please enter your name.", needPhone: "Please enter a valid phone number.", badEmail: "That email address doesn't look right.", details: "What would you like to order? (product, quantity, size...)", submit: "Submit order", submitting: "Submitting...",
           thanks: "Thank you for your order! We'll get back to you soon.", failed: "Sorry, we couldn't submit your order. Please try again.",
           fallback: "I don't have an answer for that yet.", welcome: "Hi! How can I help?", am: "AM", pm: "PM", team: "Reply from the team",
           previewOrder: "(Preview) On your live site, this order would arrive in your dashboard.",
@@ -419,6 +419,9 @@
       }
       .sb-order-title { font-size: 13px; font-weight: 600; color: #1f2937; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
       .sb-order-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .sb-order-msg { font-size: 12px; color: #dc2626; min-height: 0; }
+      .sb-order-msg:empty { display: none; }
+      @media (max-width: 360px) { .sb-order-row { grid-template-columns: 1fr; } }
       .sb-order-form input, .sb-order-form textarea {
         width: 100%; padding: 9px 12px; margin: 4px 0; border: 1px solid #e5e7eb;
         border-radius: 8px; font-size: 12.5px; outline: none; transition: border-color .15s, box-shadow .15s;
@@ -716,39 +719,48 @@
     function showOrderForm() {
       const ICON_CART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--sb-theme)"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>';
 
-      const nameInput = el("input", { type: "text", placeholder: T.name, required: "true", dir: "auto" });
-      const emailInput = el("input", { type: "email", placeholder: T.email, required: "true", dir: "ltr" });
-      const phoneInput = el("input", { type: "tel", placeholder: T.phone, dir: "ltr" });
+      // Phone / WhatsApp is the main contact (how stores in Egypt follow up); email is optional.
+      const nameInput = el("input", { type: "text", placeholder: T.name, required: "true", dir: "auto", autocomplete: "name" });
+      const phoneInput = el("input", { type: "tel", placeholder: T.phone, required: "true", dir: "ltr", inputmode: "tel", autocomplete: "tel" });
+      const emailInput = el("input", { type: "email", placeholder: T.email, dir: "ltr", autocomplete: "email" });
+      const addressInput = el("input", { type: "text", placeholder: T.address, dir: "auto", autocomplete: "street-address" });
       const messageInput = el("textarea", { rows: "2", placeholder: T.details, dir: "auto" });
+      const errorLine = el("div", { class: "sb-order-msg", role: "alert" });
 
       const submitBtn = el("button", { type: "button" }, T.submit);
 
-      const row = el("div", { class: "sb-order-row" }, nameInput, emailInput);
+      const row = el("div", { class: "sb-order-row" }, nameInput, phoneInput);
       const formDiv = el(
         "div",
         { class: "sb-order-form" },
-        el("div", { class: "sb-order-title", html: ICON_CART + "<span>Place an order</span>" }),
+        el("div", { class: "sb-order-title", html: ICON_CART + "<span></span>" }),
         row,
-        phoneInput,
+        addressInput,
         messageInput,
+        emailInput,
+        errorLine,
         submitBtn
       );
+      formDiv.querySelector(".sb-order-title span").textContent = T.orderTitle;
       const orderDiv = el("div", { class: "sb-msg sb-bot" }, formDiv);
       body.appendChild(orderDiv);
       scrollToBottom();
 
-      function clearError(node) { node.classList.remove("sb-order-error"); }
-      [nameInput, emailInput].forEach((n) => n.addEventListener("input", () => clearError(n)));
+      function clearError(node) { node.classList.remove("sb-order-error"); errorLine.textContent = ""; }
+      [nameInput, phoneInput, emailInput].forEach((n) => n.addEventListener("input", () => clearError(n)));
 
       submitBtn.addEventListener("click", () => {
         const name = nameInput.value.trim();
-        const email = emailInput.value.trim();
         const phone = phoneInput.value.trim();
+        const email = emailInput.value.trim();
+        const address = addressInput.value.trim();
         const message = messageInput.value.trim();
-        let bad = false;
-        if (!name) { nameInput.classList.add("sb-order-error"); bad = true; }
-        if (!email || !/^\S+@\S+\.\S+$/.test(email)) { emailInput.classList.add("sb-order-error"); bad = true; }
-        if (bad) return;
+        const digits = phone.replace(/\D/g, "");
+        let problem = "";
+        if (!name) { nameInput.classList.add("sb-order-error"); problem = T.needName; }
+        if (digits.length < 8 || digits.length > 15) { phoneInput.classList.add("sb-order-error"); problem = problem || T.needPhone; }
+        if (email && !/^\S+@\S+\.\S+$/.test(email)) { emailInput.classList.add("sb-order-error"); problem = problem || T.badEmail; }
+        if (problem) { errorLine.textContent = problem; return; }
 
         if (PREVIEW) {
           orderDiv.remove();
@@ -760,7 +772,7 @@
         fetch(`${API}/api/bots/${encodeURIComponent(botId)}/orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, phone, message }),
+          body: JSON.stringify({ name, phone, email, address, message }),
         })
           .then((r) => r.json())
           .then((data) => {

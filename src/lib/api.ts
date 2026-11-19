@@ -67,11 +67,11 @@ export const api = {
   adminSetPlan: (id: string, plan: Plan, months: number | null) => request<{ success: true; plan: Plan; planExpiresAt: string | null }>(`/api/admin/users/${id}/plan`, json('POST', { plan, months })),
   adminStats: () => request<AdminStats>('/api/admin/stats'),
   rejectPayment: (id: string, note: string) => request<{ success: true }>(`/api/admin/payments/${id}/reject`, json('POST', { note })),
-  /** Downloads all orders as a CSV file (fetched with the sign-in token, then saved). */
-  downloadOrdersCsv: async (id: string) => {
-    const res = await authed(`/api/bots/${id}/orders/export/csv`);
+  /** Downloads all orders as an Excel file (.xlsx), fetched with the sign-in token, then saved. */
+  downloadOrdersExcel: async (id: string) => {
+    const res = await authed(`/api/bots/${id}/orders/export/xlsx`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Download failed (${res.status})`);
-    const name = res.headers.get('content-disposition')?.match(/filename="?([^";]+)/)?.[1] ?? `orders-${id}.csv`;
+    const name = res.headers.get('content-disposition')?.match(/filename="?([^";]+)/)?.[1] ?? `orders-${id}.xlsx`;
     const href = URL.createObjectURL(await res.blob());
     const a = Object.assign(document.createElement('a'), { href, download: name });
     document.body.appendChild(a); a.click(); a.remove();

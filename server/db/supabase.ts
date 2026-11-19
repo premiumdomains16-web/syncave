@@ -74,7 +74,8 @@ function botToRow(b: Bot) {
   };
 }
 
-const orderFromRow = (r: any): Order => ({ id: r.id, name: r.name, email: r.email, phone: r.phone ?? "", message: r.message ?? "", timestamp: r.created_at });
+const orderFromRow = (r: any): Order => ({ id: r.id, name: r.name, email: r.email ?? "", phone: r.phone ?? "", address: r.address ?? "", message: r.message ?? "", timestamp: r.created_at });
+let warnedNoOrderAddress = false;
 const unansweredFromRow = (r: any): Unanswered => ({ id: r.id, question: r.question, key: r.key, count: r.count, firstSeen: r.first_seen, lastSeen: r.last_seen });
 
 function userFromRow(r: any): UserRecord {
@@ -186,10 +187,19 @@ export function createSupabaseDatabase(url: string, serviceRoleKey: string): Dat
         return { orders: (res.data ?? []).map(orderFromRow), total: res.count ?? 0 };
       },
       insert: async (botId, o, keep) => {
-        ok(await sb.rpc("insert_order", {
+        const args = {
           p_bot_id: botId, p_id: o.id, p_name: o.name, p_email: o.email, p_phone: o.phone, p_message: o.message,
           p_created_at: o.timestamp, p_keep: keep,
-        }), "insert_order");
+        };
+        if (o.address) {
+          const res = await sb.rpc("insert_order", { ...args, p_address: o.address });
+          if (!res.error) return;
+          // Database not migrated yet (supabase/migrate-007-order-address.sql): keep the address in the details.
+          if (!/p_address|function|schema cache/i.test(res.error.message)) throw new Error(`Supabase insert_order: ${res.error.message}`);
+          if (!warnedNoOrderAddress) { warnedNoOrderAddress = true; log.warn("Run supabase/migrate-007-order-address.sql to store order addresses", { error: res.error.message }); }
+          args.p_message = [o.message, `Address: ${o.address}`].filter(Boolean).join("\n");
+        }
+        ok(await sb.rpc("insert_order", args), "insert_order");
       },
     },
     unanswered: {

@@ -87,7 +87,7 @@ export function AppearanceTab({ bot, onUpdate, onUpload }: Props) {
 
       <Card
         title={<span className="inline-flex items-center gap-2">Orders {!limits.orders && <PlanLockBadge plan={plan} need={needOrders} />}</span>}
-        desc="Adds a “Place an order” option that collects name, email, phone and a message. Submissions show up in the Orders tab."
+        desc="Adds a “Place an order” option that collects name, phone / WhatsApp, address and what they want (email optional). Orders show up in the Orders tab, with one-tap WhatsApp and Excel export."
       >
         {limits.orders ? (
           <Toggle checked={bot.enableOrders} onChange={(v) => onUpdate({ enableOrders: v })} label="Let visitors place orders in the chat" />

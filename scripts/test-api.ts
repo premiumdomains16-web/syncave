@@ -115,8 +115,36 @@ r = await call("POST", `/api/bots/${bot.id}/orders`, { json: { name: { x: 1 }, e
 check("bad order → 400", r.status === 400);
 
 // --- CSV ---
-r = await call("GET", `/api/bots/${bot.id}/orders/export/csv`, { token: alice });
-check("csv export", r.status === 200 && String(r.data).includes("ID,Name,Email") && /attachment/.test(r.headers.get("content-disposition") ?? ""));
+// --- orders: phone-first form + Excel export ---
+{
+  // Give Alice's bot orders: paid plan, verified, published with orders on.
+  const owner = await db().users.findByAuthId("auth-alice");
+  await db().users.setPlan(owner!.id, "starter", new Date(Date.now() + 86400000).toISOString());
+  const b = (await db().bots.get(bot.id))!;
+  b.verified = true; b.enableOrders = true;
+  b.published = { ...b, publishedAt: new Date().toISOString() } as any;
+  await db().bots.save(b);
+
+  r = await call("POST", `/api/bots/${bot.id}/orders`, { json: { name: "منى أحمد", phone: "010 1234 5678", address: "12 شارع النصر، المعادي", message: "2 × تيشيرت مقاس L" } });
+  check("phone-only order accepted (email optional)", r.status === 200 && r.data.order.email === "" && r.data.order.address.includes("المعادي"), JSON.stringify(r.data));
+  r = await call("POST", `/api/bots/${bot.id}/orders`, { json: { name: "Old Widget", email: "old@example.com" } });
+  check("older email-only order still accepted", r.status === 200);
+  r = await call("POST", `/api/bots/${bot.id}/orders`, { json: { name: "No Contact", message: "hi" } });
+  check("order needs a phone or email", r.status === 400);
+  r = await call("POST", `/api/bots/${bot.id}/orders`, { json: { name: "Bad", phone: "12" } });
+  check("too-short phone rejected", r.status === 400);
+
+  const res = await app.fetch(new Request(`http://edge.test/api/bots/${bot.id}/orders/export/xlsx`, { headers: { Authorization: `Bearer ${alice}` } }));
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const { unzipSync, strFromU8 } = await import("fflate");
+  let sheet = "";
+  try { sheet = strFromU8(unzipSync(bytes)["xl/worksheets/sheet1.xml"]); } catch {}
+  check("Excel export is a real .xlsx", res.status === 200 && /spreadsheetml/.test(res.headers.get("content-type") ?? "") && /\.xlsx/.test(res.headers.get("content-disposition") ?? "") && bytes[0] === 0x50 && bytes[1] === 0x4b);
+  check("Excel has header, Arabic text and phone kept as text", sheet.includes("Order details") && sheet.includes("منى أحمد") && sheet.includes("010 1234 5678") && sheet.includes('t="inlineStr"'));
+  r = await call("GET", `/api/bots/${bot.id}/orders/export/xlsx`, { token: "tok:auth-eve:eve@example.com:1" });
+  check("other users can't export", r.status === 404);
+  await db().users.setPlan(owner!.id, "free", null);
+}
 
 // --- simulator: internal addresses refused ---
 r = await call("POST", "/api/simulate", { json: { url: "http://127.0.0.1:8080" } });
